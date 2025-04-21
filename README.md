@@ -4,8 +4,8 @@
 ## Installation
 
 ```console
-conda create --name AFFWriting python=3.7
-conda activate AFFWriting
+conda create --name AFFGanWriting python=3.7
+conda activate AFFGanWriting
 conda install pytorch==1.4.0 torchvision==0.5.0 cudatoolkit=10.1 -c pytorch
-git clone https://github.com/aimagelab/VATr.git && cd VATr
+git clone https://github.com/wh807088026/AFFGanWriting.git && cd AFFGanWriting
 pip install -r requirements.txt
