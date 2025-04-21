@@ -9,6 +9,8 @@ conda activate AFFGanWriting
 conda install pytorch==1.4.0 torchvision==0.5.0 cudatoolkit=10.1 -c pytorch
 git clone https://github.com/wh807088026/AFFGanWriting.git && cd AFFGanWriting
 pip install -r requirements.txt
+```
+
 
 ## Dataset preparation
 
