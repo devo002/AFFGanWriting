@@ -6,12 +6,12 @@ model_urls = {
     'vgg11': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg11-bbd30ac9.pth',
     'vgg13': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg13-c768596a.pth',
     'vgg16': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg16-397923af.pth',
-    'vgg19': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg19-dcbb9e9d.pth',
+    'vgg19': '/home/woody/iwi5/iwi5333h/model/vgg19-dcbb9e9d.pth',
     'vgg11_bn': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg11_bn-6002323d.pth',
     'vgg13_bn': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg13_bn-abd245e5.pth',
     'vgg16_bn': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg16_bn-6c64b313.pth',
     'vgg16_bn': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg16_bn-6c64b313.pth',
-    'vgg19_bn': '/home/WeiHongxi/WangHeng/project/dataset/VGG_pth/vgg19_bn-c79401a0.pth',
+    'vgg19_bn': '/home/woody/iwi5/iwi5333h/AFFGanWriting/model/vgg19_bn-c79401a0.pth',
 }
 
 class VGG(nn.Module):
