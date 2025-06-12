@@ -223,7 +223,7 @@ def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
 
     if CurriculumModelID > 0:
-        model_file = 'save_weights/contran-' + str(CurriculumModelID) +'.model'
+        model_file = '/home/vault/iwi5/iwi5333h/output/save_weights/contran-' + str(CurriculumModelID) +'.model'
         print('Loading ' + model_file)
         model.load_state_dict(torch.load(model_file)) #load
         #pretrain_dict = torch.load(model_file)
@@ -255,7 +255,7 @@ def main(train_loader, test_loader, num_writers):
         cer = train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch)
 
         if epoch % MODEL_SAVE_EPOCH == 0:
-            folder_weights = 'save_weights'
+            folder_weights = '/home/vault/iwi5/iwi5333h/output/save_weights'
             if not os.path.exists(folder_weights):
                 os.makedirs(folder_weights)
             torch.save(model.state_dict(), folder_weights+'/contran-%d.model'%epoch)
@@ -273,17 +273,18 @@ def main(train_loader, test_loader, num_writers):
                 min_count += 1
             if min_count >= EARLY_STOP_EPOCH:
                 print('Early stop at %d and the best epoch is %d' % (epoch, min_idx))
-                model_url = 'save_weights/contran-'+str(min_idx)+'.model'
-                os.system('mv '+model_url+' '+model_url+'.bak')
-                os.system('rm save_weights/contran-*.model')
+                model_url = f'/home/vault/iwi5/iwi5333h/output/save_weights/contran-{min_idx}.model'
+                os.system(f'mv {model_url} {model_url}.bak')
+                os.system('rm /home/vault/iwi5/iwi5333h/output/save_weights/contran-*.model')
                 break
 
 def rm_old_model(index):
-    models = glob.glob('save_weights/*.model')
+    folder_weights = '/home/vault/iwi5/iwi5333h/output/save_weights'
+    models = glob.glob(folder_weights + '/*.model')
     for m in models:
         epoch = int(m.split('.')[0].split('-')[1])
         if epoch < index:
-            os.system('rm save_weights/contran-'+str(epoch)+'.model')
+            os.system(f'rm {folder_weights}/contran-{epoch}.model')
 
 if __name__ == '__main__':
     print(time.ctime())
