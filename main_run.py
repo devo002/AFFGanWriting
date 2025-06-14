@@ -12,6 +12,7 @@ from network_tro import ConTranModel
 from load_data import loadData as load_data_func
 from loss_tro import CER
 import torch.backends.cudnn as cudnn
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 except ModuleNotFoundError:
@@ -24,9 +25,7 @@ args = parser.parse_args()
 gpu = torch.device('cuda')
 
 OOV = True
-
 NUM_THREAD = 2
-
 EARLY_STOP_EPOCH = None
 EVAL_EPOCH = 20
 MODEL_SAVE_EPOCH = 100
@@ -44,17 +43,20 @@ lr_cla = 1 * 1e-5
 CurriculumModelID = args.start_epoch
 model_name = 'aaa'
 run_id = datetime.strftime(datetime.now(), '%m-%d-%H-%M')
-logdir = os.path.join('log/' + model_name + '-' + str(run_id))
+base_logdir = '/home/vault/iwi5/iwi5333h'
+logdir = os.path.join(base_logdir, 'log', model_name + '-' + str(run_id))
+os.makedirs(logdir, exist_ok=True)  # Create the folder if it doesn't exist
 writer = SummaryWriter(logdir)
+
+
 def log(msg):
     logger = logging.getLogger("GanWriting")
-    handler = logging.FileHandler(logdir + '/log.txt')
+    handler = logging.FileHandler(os.path.join(logdir, 'log.txt'))
 
-    logger.setLevel(logging.INFO)  # 设置日志等级
-    # 日志输出格式
+    logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
-    # 输入到控制台
+
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
 
@@ -62,7 +64,7 @@ def log(msg):
     logger.addHandler(console)
 
     logger.info(msg)
-    # 移除处理器
+
     logger.removeHandler(handler)
     logger.removeHandler(console)
 
@@ -72,17 +74,11 @@ def all_data_loader():
     test_loader = torch.utils.data.DataLoader(data_test, collate_fn=sort_batch, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_THREAD, pin_memory=True)
     return train_loader, test_loader
 
-
 def sort_batch(batch):
-    train_domain = list()
-    train_wid = list()
-    train_idx = list()
-    train_img = list()
-    train_img_width = list()
-    train_label = list()
-    img_xts = list()
-    label_xts = list()
-    label_xts_swap = list()
+    train_domain, train_wid, train_idx = [], [], []
+    train_img, train_img_width, train_label = [], [], []
+    img_xts, label_xts, label_xts_swap = [], [], []
+
     for domain, wid, idx, img, img_width, label, img_xt, label_xt, label_xt_swap in batch:
         if wid >= NUM_WRITERS:
             print('error!')
@@ -98,54 +94,40 @@ def sort_batch(batch):
 
     train_domain = np.array(train_domain)
     train_idx = np.array(train_idx)
-    train_wid = np.array(train_wid, dtype='int64')
-    train_img = np.array(train_img, dtype='float32')
-    train_img_width = np.array(train_img_width, dtype='int64')
-    train_label = np.array(train_label, dtype='int64')
-    img_xts = np.array(img_xts, dtype='float32')
-    label_xts = np.array(label_xts, dtype='int64')
-    label_xts_swap = np.array(label_xts_swap, dtype='int64')
-
-    train_wid = torch.from_numpy(train_wid)
-    train_img = torch.from_numpy(train_img)
-    train_img_width = torch.from_numpy(train_img_width)
-    train_label = torch.from_numpy(train_label)
-    img_xts = torch.from_numpy(img_xts)
-    label_xts = torch.from_numpy(label_xts)
-    label_xts_swap = torch.from_numpy(label_xts_swap)
+    train_wid = torch.tensor(train_wid, dtype=torch.int64)
+    train_img = torch.tensor(train_img, dtype=torch.float32)
+    train_img_width = torch.tensor(train_img_width, dtype=torch.int64)
+    train_label = torch.tensor(train_label, dtype=torch.int64)
+    img_xts = torch.tensor(img_xts, dtype=torch.float32)
+    label_xts = torch.tensor(label_xts, dtype=torch.int64)
+    label_xts_swap = torch.tensor(label_xts_swap, dtype=torch.int64)
 
     return train_domain, train_wid, train_idx, train_img, train_img_width, train_label, img_xts, label_xts, label_xts_swap
 
 def train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch):
     model.train()
-    loss_dis = list()
-    loss_dis_tr = list()
-    loss_cla = list()
-    loss_cla_tr = list()
-    loss_l1 = list()
-    loss_rec = list()
-    loss_rec_tr = list()
+    loss_dis, loss_dis_tr = [], []
+    loss_cla, loss_cla_tr = [], []
+    loss_l1, loss_rec, loss_rec_tr = [], [], []
+
     time_s = time.time()
     cer_tr = CER()
     cer_te = CER()
     cer_te2 = CER()
+
     for train_data_list in train_loader:
-        '''rec update'''
         rec_opt.zero_grad()
         l_rec_tr = model(train_data_list, epoch, 'rec_update', cer_tr)
         rec_opt.step()
 
-        '''classifier update'''
         cla_opt.zero_grad()
         l_cla_tr = model(train_data_list, epoch, 'cla_update')
         cla_opt.step()
 
-        '''dis update'''
         dis_opt.zero_grad()
         l_dis_tr = model(train_data_list, epoch, 'dis_update')
         dis_opt.step()
 
-        '''gen update'''
         gen_opt.zero_grad()
         l_total, l_dis, l_cla, l_l1, l_rec = model(train_data_list, epoch, 'gen_update', [cer_te, cer_te2])
         gen_opt.step()
@@ -158,92 +140,72 @@ def train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch):
         loss_rec.append(l_rec.cpu().item())
         loss_rec_tr.append(l_rec_tr.cpu().item())
 
-    fl_dis = np.mean(loss_dis)
-    fl_dis_tr = np.mean(loss_dis_tr)
-    fl_cla = np.mean(loss_cla)
-    fl_cla_tr = np.mean(loss_cla_tr)
-    fl_l1 = np.mean(loss_l1)
-    fl_rec = np.mean(loss_rec)
-    fl_rec_tr = np.mean(loss_rec_tr)
-
     res_cer_tr = cer_tr.fin()
     res_cer_te = cer_te.fin()
     res_cer_te2 = cer_te2.fin()
-    writer.add_scalars("train",
-                       {"fl_dis_tr": fl_dis_tr, "fl_dis": fl_dis, "fl_cla_tr": fl_cla_tr,
-                        "fl_cla": fl_cla, "fl_rec_tr": fl_rec_tr, "fl_rec": fl_rec, "fl_l1": fl_l1,
-                        "res_cer_tr": res_cer_tr, "res_cer_te": res_cer_te, "res_cer_te2": res_cer_te2}, epoch)
 
+    writer.add_scalars("train", {
+        "fl_dis_tr": np.mean(loss_dis_tr), "fl_dis": np.mean(loss_dis),
+        "fl_cla_tr": np.mean(loss_cla_tr), "fl_cla": np.mean(loss_cla),
+        "fl_rec_tr": np.mean(loss_rec_tr), "fl_rec": np.mean(loss_rec),
+        "fl_l1": np.mean(loss_l1),
+        "res_cer_tr": res_cer_tr, "res_cer_te": res_cer_te, "res_cer_te2": res_cer_te2
+    }, epoch)
 
-    info_tr =('epo%d <tr>-<gen>: l_dis=%.2f-%.2f, l_cla=%.2f-%.2f, l_rec=%.2f-%.2f, l1=%.2f, cer=%.2f-%.2f-%.2f, time=%.1f' %
-              (epoch, fl_dis_tr, fl_dis, fl_cla_tr, fl_cla, fl_rec_tr, fl_rec, fl_l1, res_cer_tr, res_cer_te, res_cer_te2,
-               time.time()-time_s))
-    log(info_tr)
-    # print('epo%d <tr>-<gen>: l_dis=%.2f-%.2f, l_cla=%.2f-%.2f, l_rec=%.2f-%.2f, l1=%.2f, cer=%.2f-%.2f-%.2f, time=%.1f' % (epoch, fl_dis_tr, fl_dis, fl_cla_tr, fl_cla, fl_rec_tr, fl_rec, fl_l1, res_cer_tr, res_cer_te, res_cer_te2, time.time()-time_s))
+    log(('epo%d <tr>-<gen>: l_dis=%.2f-%.2f, l_cla=%.2f-%.2f, l_rec=%.2f-%.2f, l1=%.2f, cer=%.2f-%.2f-%.2f, time=%.1f' %
+         (epoch, np.mean(loss_dis_tr), np.mean(loss_dis), np.mean(loss_cla_tr), np.mean(loss_cla),
+          np.mean(loss_rec_tr), np.mean(loss_rec), np.mean(loss_l1),
+          res_cer_tr, res_cer_te, res_cer_te2, time.time() - time_s)))
+    
     return res_cer_te + res_cer_te2
 
 def test(test_loader, epoch, modelFile_o_model):
-    if type(modelFile_o_model) == str:
+    if isinstance(modelFile_o_model, str):
         model = ConTranModel(NUM_WRITERS, show_iter_num, OOV).to(gpu)
         print('Loading ' + modelFile_o_model)
-        model.load_state_dict(torch.load(modelFile_o_model)) #load
+        model.load_state_dict(torch.load(modelFile_o_model))
     else:
         model = modelFile_o_model
     model.eval()
-    loss_dis = list()
-    loss_cla = list()
-    loss_rec = list()
+
+    loss_dis, loss_cla, loss_rec = [], [], []
     time_s = time.time()
     cer_te = CER()
     cer_te2 = CER()
+
     for test_data_list in test_loader:
         l_dis, l_cla, l_rec = model(test_data_list, epoch, 'eval', [cer_te, cer_te2])
-
         loss_dis.append(l_dis.cpu().item())
         loss_cla.append(l_cla.cpu().item())
         loss_rec.append(l_rec.cpu().item())
 
-    fl_dis = np.mean(loss_dis)
-    fl_cla = np.mean(loss_cla)
-    fl_rec = np.mean(loss_rec)
+    writer.add_scalars("EVAL", {
+        "fl_dis": np.mean(loss_dis), "fl_cla": np.mean(loss_cla),
+        "fl_rec": np.mean(loss_rec),
+        "res_cer_te": cer_te.fin(), "res_cer_te2": cer_te2.fin()
+    }, epoch)
 
-    res_cer_te = cer_te.fin()
-    res_cer_te2 = cer_te2.fin()
-
-
-    writer.add_scalars("EVAL",
-                       {"fl_dis": fl_dis, "fl_cla": fl_cla, "fl_rec": fl_rec,
-                        "res_cer_te": res_cer_te, "res_cer_te2": res_cer_te2}, epoch)
-    info_ev = ('EVAL: l_dis=%.3f, l_cla=%.3f, l_rec=%.3f, cer=%.2f-%.2f, time=%.1f' % (fl_dis, fl_cla, fl_rec, res_cer_te, res_cer_te2, time.time()-time_s))
-    log(info_ev)
-
-    # print('EVAL: l_dis=%.3f, l_cla=%.3f, l_rec=%.3f, cer=%.2f-%.2f, time=%.1f' % (fl_dis, fl_cla, fl_rec, res_cer_te, res_cer_te2, time.time()-time_s))
+    log(('EVAL: l_dis=%.3f, l_cla=%.3f, l_rec=%.3f, cer=%.2f-%.2f, time=%.1f' %
+         (np.mean(loss_dis), np.mean(loss_cla), np.mean(loss_rec),
+          cer_te.fin(), cer_te2.fin(), time.time() - time_s)))
 
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
-
+    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights'
+    os.makedirs(folder_weights, exist_ok=True)
+    
     if CurriculumModelID > 0:
-        model_file = '/home/vault/iwi5/iwi5333h/output/save_weights/contran-' + str(CurriculumModelID) +'.model'
+        model_file = os.path.join(folder_weights, f'contran-{CurriculumModelID}.model')
         print('Loading ' + model_file)
-        model.load_state_dict(torch.load(model_file)) #load
-        #pretrain_dict = torch.load(model_file)
-        #model_dict = model.state_dict()
-        #pretrain_dict = {k: v for k, v in pretrain_dict.items() if k in model_dict and not k.startswith('gen.enc_text.fc')}
-        #model_dict.update(pretrain_dict)
-        #model.load_state_dict(model_dict)
+        model.load_state_dict(torch.load(model_file))
 
-    dis_params = list(model.dis.parameters())
-    gen_params = list(model.gen.parameters())
-    rec_params = list(model.rec.parameters())
-    cla_params = list(model.cla.parameters())
-    dis_opt = optim.Adam([p for p in dis_params if p.requires_grad], lr=lr_dis)
-    gen_opt = optim.Adam([p for p in gen_params if p.requires_grad], lr=lr_gen)
-    rec_opt = optim.Adam([p for p in rec_params if p.requires_grad], lr=lr_rec)
-    cla_opt = optim.Adam([p for p in cla_params if p.requires_grad], lr=lr_cla)
+    dis_opt = optim.Adam(filter(lambda p: p.requires_grad, model.dis.parameters()), lr=lr_dis)
+    gen_opt = optim.Adam(filter(lambda p: p.requires_grad, model.gen.parameters()), lr=lr_gen)
+    rec_opt = optim.Adam(filter(lambda p: p.requires_grad, model.rec.parameters()), lr=lr_rec)
+    cla_opt = optim.Adam(filter(lambda p: p.requires_grad, model.cla.parameters()), lr=lr_cla)
+
     epochs = 50001
-    min_cer = 1e5
-    min_idx = 0
-    min_count = 0
+    min_cer, min_idx, min_count = 1e5, 0, 0
 
     for epoch in range(CurriculumModelID, epochs):
         if epoch > 4000:
@@ -252,39 +214,35 @@ def main(train_loader, test_loader, num_writers):
 
         if epoch % 10 == 0 and epoch != 0:
             train_loader, test_loader = all_data_loader()
+
         cer = train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch)
 
         if epoch % MODEL_SAVE_EPOCH == 0:
-            folder_weights = '/home/vault/iwi5/iwi5333h/output/save_weights'
-            if not os.path.exists(folder_weights):
-                os.makedirs(folder_weights)
-            torch.save(model.state_dict(), folder_weights+'/contran-%d.model'%epoch)
+            model_path = os.path.join(folder_weights, f'contran-{epoch}.model')
+            torch.save(model.state_dict(), model_path)
 
         if epoch % EVAL_EPOCH == 0:
             test(test_loader, epoch, model)
 
         if EARLY_STOP_EPOCH is not None:
             if min_cer > cer:
-                min_cer = cer
-                min_idx = epoch
-                min_count = 0
-                rm_old_model(min_idx)
+                min_cer, min_idx, min_count = cer, epoch, 0
+                rm_old_model(min_idx, folder_weights)
             else:
                 min_count += 1
             if min_count >= EARLY_STOP_EPOCH:
-                print('Early stop at %d and the best epoch is %d' % (epoch, min_idx))
-                model_url = f'/home/vault/iwi5/iwi5333h/output/save_weights/contran-{min_idx}.model'
+                print(f'Early stop at {epoch}, best at {min_idx}')
+                model_url = os.path.join(folder_weights, f'contran-{min_idx}.model')
                 os.system(f'mv {model_url} {model_url}.bak')
-                os.system('rm /home/vault/iwi5/iwi5333h/output/save_weights/contran-*.model')
+                os.system(f'rm {folder_weights}/contran-*.model')
                 break
 
-def rm_old_model(index):
-    folder_weights = '/home/vault/iwi5/iwi5333h/output/save_weights'
-    models = glob.glob(folder_weights + '/*.model')
+def rm_old_model(index, folder_weights):
+    models = glob.glob(os.path.join(folder_weights, '*.model'))
     for m in models:
-        epoch = int(m.split('.')[0].split('-')[1])
+        epoch = int(m.split('-')[-1].split('.')[0])
         if epoch < index:
-            os.system(f'rm {folder_weights}/contran-{epoch}.model')
+            os.remove(m)
 
 if __name__ == '__main__':
     print(time.ctime())

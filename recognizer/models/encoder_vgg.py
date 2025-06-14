@@ -28,6 +28,9 @@ class Encoder(nn.Module):
 
         #self.layer = vgg16_bn(PRE_TRAIN_VGG)
         self.layer = vgg19_bn(PRE_TRAIN_VGG)
+       
+
+
 
         if DROP_OUT:
             self.layer_dropout = nn.Dropout2d(p=0.5)
