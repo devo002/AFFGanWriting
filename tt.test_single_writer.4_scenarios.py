@@ -14,12 +14,13 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 '''Take turns to open the comments below to run 4 scenario experiments'''
 
-folder_wids = '/home/WeiHongxi/WangHeng/project/dataset/Iam_database/words_wid'
+folder_wids = '/home/woody/iwi5/iwi5333h/data'
 # img_base = '/home/WeiHongxi/WangHeng/project/dataset/Iam_database/words/'
-img_base = '/home/WeiHongxi/WangHeng/project/dataset/Iam_database/words_wid/'
-folder_pre = 'test_single_writer.4_scenarios/'
+img_base = '/home/woody/iwi5/iwi5333h/data'
+folder_pre = '/home/vault/iwi5/iwi5333h/test_single_writer.44_scenarios/'
 # folder_pre = 'test_single_writer.4_scenarios_average/'
-epoch = 5000
+#epoch = 5000
+epoch = 2300
 
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -74,7 +75,16 @@ gpu = torch.device('cuda')
 
 def test_writer(wid, model_file, folder,text_corpus,data_dict):
     def read_image(file_name, thresh=None):
-        url = img_base + wid + '/' + file_name + '.png'
+        subfolder = file_name.split('-')[0]  # gets 'a01'
+        parent = '-'.join(file_name.split('-')[:2])  # gets 'a01-000u'
+        url = os.path.join(img_base, subfolder, parent, file_name + '.png')
+        
+        if not os.path.exists(url):
+            print(f"⚠️ Image not found: {url}")
+            return None
+        
+        #old block
+        #url = img_base + wid + '/' + file_name + '.png'
         img = cv2.imread(url, 0)
         if thresh:
             #img[img>thresh] = 255
@@ -178,8 +188,8 @@ if __name__ == '__main__':
     for i in range(1):
         if i == 0:
             folder = folder_pre +model_epoch +'/res_1.in_vocab_tr_writer'
-            target_file = 'Groundtruth/gan.iam.tr_va.gt.filter27'
-            text_corpus = 'corpora_english/in_vocab.subset.tro.37'
+            target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
+            text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
         # elif i ==1:
         #     folder = folder_pre + model_epoch + '/res_2.in_vocab_te_writer'
         #     target_file = 'Groundtruth/gan.iam.test.gt.filter27'
@@ -208,5 +218,5 @@ if __name__ == '__main__':
         for wid in wids:
             # print(wid)
             # test_writer(wid, 'save_weights/<your best model>')
-            test_writer(wid, 'save_weights/contran-' + model_epoch + '.model', folder, text_corpus, data_dict)
+            test_writer(wid, '/home/vault/iwi5/iwi5333h/save_weights/contran-' + model_epoch + '.model', folder, text_corpus, data_dict)
 

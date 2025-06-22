@@ -24,9 +24,10 @@ args = parser.parse_args()
 
 gpu = torch.device('cuda')
 
+# Hyperparams and Configs
 OOV = True
 NUM_THREAD = 2
-EARLY_STOP_EPOCH = None
+EARLY_STOP_EPOCH = 10
 EVAL_EPOCH = 20
 MODEL_SAVE_EPOCH = 100
 show_iter_num = 500
@@ -45,26 +46,20 @@ model_name = 'aaa'
 run_id = datetime.strftime(datetime.now(), '%m-%d-%H-%M')
 base_logdir = '/home/vault/iwi5/iwi5333h'
 logdir = os.path.join(base_logdir, 'log', model_name + '-' + str(run_id))
-os.makedirs(logdir, exist_ok=True)  # Create the folder if it doesn't exist
+os.makedirs(logdir, exist_ok=True)
 writer = SummaryWriter(logdir)
-
 
 def log(msg):
     logger = logging.getLogger("GanWriting")
     handler = logging.FileHandler(os.path.join(logdir, 'log.txt'))
-
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
-
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
-
     logger.addHandler(handler)
     logger.addHandler(console)
-
     logger.info(msg)
-
     logger.removeHandler(handler)
     logger.removeHandler(console)
 
@@ -92,17 +87,17 @@ def sort_batch(batch):
         label_xts.append(label_xt)
         label_xts_swap.append(label_xt_swap)
 
-    train_domain = np.array(train_domain)
-    train_idx = np.array(train_idx)
-    train_wid = torch.tensor(train_wid, dtype=torch.int64)
-    train_img = torch.tensor(train_img, dtype=torch.float32)
-    train_img_width = torch.tensor(train_img_width, dtype=torch.int64)
-    train_label = torch.tensor(train_label, dtype=torch.int64)
-    img_xts = torch.tensor(img_xts, dtype=torch.float32)
-    label_xts = torch.tensor(label_xts, dtype=torch.int64)
-    label_xts_swap = torch.tensor(label_xts_swap, dtype=torch.int64)
-
-    return train_domain, train_wid, train_idx, train_img, train_img_width, train_label, img_xts, label_xts, label_xts_swap
+    return (
+        np.array(train_domain),
+        torch.tensor(train_wid, dtype=torch.int64),
+        np.array(train_idx),
+        torch.tensor(train_img, dtype=torch.float32),
+        torch.tensor(train_img_width, dtype=torch.int64),
+        torch.tensor(train_label, dtype=torch.int64),
+        torch.tensor(img_xts, dtype=torch.float32),
+        torch.tensor(label_xts, dtype=torch.int64),
+        torch.tensor(label_xts_swap, dtype=torch.int64)
+    )
 
 def train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch):
     model.train()
@@ -179,6 +174,8 @@ def test(test_loader, epoch, modelFile_o_model):
         loss_cla.append(l_cla.cpu().item())
         loss_rec.append(l_rec.cpu().item())
 
+    test_cer = cer_te.fin() + cer_te2.fin()
+
     writer.add_scalars("EVAL", {
         "fl_dis": np.mean(loss_dis), "fl_cla": np.mean(loss_cla),
         "fl_rec": np.mean(loss_rec),
@@ -188,12 +185,45 @@ def test(test_loader, epoch, modelFile_o_model):
     log(('EVAL: l_dis=%.3f, l_cla=%.3f, l_rec=%.3f, cer=%.2f-%.2f, time=%.1f' %
          (np.mean(loss_dis), np.mean(loss_cla), np.mean(loss_rec),
           cer_te.fin(), cer_te2.fin(), time.time() - time_s)))
+    
+    return test_cer
+
+class EarlyStopping:
+    def __init__(self, patience=5, delta=0, verbose=False):
+        self.patience = patience
+        self.delta = delta
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+
+    def __call__(self, val_loss):
+        score = -val_loss
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.verbose:
+                print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss)
+            self.counter = 0
+
+    def save_checkpoint(self, val_loss):
+        if self.verbose:
+            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).')
+        self.val_loss_min = val_loss
 
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
     folder_weights = '/home/vault/iwi5/iwi5333h/save_weights'
     os.makedirs(folder_weights, exist_ok=True)
-    
+
     if CurriculumModelID > 0:
         model_file = os.path.join(folder_weights, f'contran-{CurriculumModelID}.model')
         print('Loading ' + model_file)
@@ -204,10 +234,9 @@ def main(train_loader, test_loader, num_writers):
     rec_opt = optim.Adam(filter(lambda p: p.requires_grad, model.rec.parameters()), lr=lr_rec)
     cla_opt = optim.Adam(filter(lambda p: p.requires_grad, model.cla.parameters()), lr=lr_cla)
 
-    epochs = 50001
-    min_cer, min_idx, min_count = 1e5, 0, 0
+    early_stopping = EarlyStopping(patience=EARLY_STOP_EPOCH if EARLY_STOP_EPOCH else 10, verbose=True)
 
-    for epoch in range(CurriculumModelID, epochs):
+    for epoch in range(CurriculumModelID, 50001):
         if epoch > 4000:
             global MODEL_SAVE_EPOCH
             MODEL_SAVE_EPOCH = 20
@@ -217,26 +246,19 @@ def main(train_loader, test_loader, num_writers):
 
         cer = train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch)
 
+        if epoch % EVAL_EPOCH == 0:
+            test_cer = test(test_loader, epoch, model)
+            early_stopping(test_cer)
+            if early_stopping.early_stop:
+                print(f"Early stopping triggered at epoch {epoch}")
+                model_path = os.path.join(folder_weights, f'contran-best.model')
+                torch.save(model.state_dict(), model_path)
+                break
+
         if epoch % MODEL_SAVE_EPOCH == 0:
             model_path = os.path.join(folder_weights, f'contran-{epoch}.model')
             torch.save(model.state_dict(), model_path)
-
-        if epoch % EVAL_EPOCH == 0:
-            test(test_loader, epoch, model)
-
-        if EARLY_STOP_EPOCH is not None:
-            if min_cer > cer:
-                min_cer, min_idx, min_count = cer, epoch, 0
-                rm_old_model(min_idx, folder_weights)
-            else:
-                min_count += 1
-            if min_count >= EARLY_STOP_EPOCH:
-                print(f'Early stop at {epoch}, best at {min_idx}')
-                model_url = os.path.join(folder_weights, f'contran-{min_idx}.model')
-                os.system(f'mv {model_url} {model_url}.bak')
-                os.system(f'rm {folder_weights}/contran-*.model')
-                break
-
+            
 def rm_old_model(index, folder_weights):
     models = glob.glob(os.path.join(folder_weights, '*.model'))
     for m in models:

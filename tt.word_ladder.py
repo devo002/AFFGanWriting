@@ -9,9 +9,9 @@ from modules_tro import normalize
 import os
 
 
-folder = 'word_ladder'
-img_base = '/home/lkang/datasets/iam_final_forms/words_from_forms/'
-target_file = '/home/lkang/datasets/iam_final_forms/gan.iam.test.gt.filter27'
+folder = '/home/vault/iwi5/iwi5333h/word_ladder'
+img_base = '/home/woody/iwi5/iwi5333h/iam_all_extracted'
+target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
 
 '''data preparation'''
 data_dict = dict()
@@ -31,9 +31,16 @@ if not os.path.exists(folder):
 gpu = torch.device('cuda')
 
 def test_writer(wid, model_file):
-    def read_image(file_name, thresh=None):
-        url = img_base + file_name + '.png'
+    def read_image(file_name, thresh=None): 
+        url = os.path.join(img_base, file_name + '.png')             
+        #url = img_base + file_name + '.png'
         img = cv2.imread(url, 0)
+        if img is None:
+            print(f"[ERROR] Image not found or unreadable: {url}")
+            return None
+        
+        img = cv2.imread(url, 0)
+        
         if thresh:
             #img[img>thresh] = 255
             pass
@@ -91,9 +98,10 @@ def test_writer(wid, model_file):
     model.eval()
     num = 0
     with torch.no_grad():
-        f_xs = model.gen.enc_image(imgs)
+        f_xs = model.gen.enc_image(imgs)    
+        
         for label in labels:
-            label = label.unsqueeze(0)
+            label = label.unsqueeze(0)  
             f_xt, f_embed = model.gen.enc_text(label)
             f_mix = model.gen.mix(f_xs, f_embed)
             xg = model.gen.decode(f_mix, f_xt)
@@ -115,9 +123,10 @@ def test_writer(wid, model_file):
                 xg = 255 - xg
                 cv2.imwrite(folder+'/'+wid+'-'+str(num)+'.'+label+'-'+pred+'.png', xg)
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     with open(target_file, 'r') as _f:
         data = _f.readlines()
+        
     wids = list(set([i.split(',')[0] for i in data]))
     for wid in wids:
-        test_writer(wid, 'save_weights/<your best model>')
+        test_writer(wid, '/home/vault/iwi5/iwi5333h/save_weights/contran-1600.model')
