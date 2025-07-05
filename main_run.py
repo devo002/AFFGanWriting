@@ -27,7 +27,7 @@ gpu = torch.device('cuda')
 # Hyperparams and Configs
 OOV = True
 NUM_THREAD = 2
-EARLY_STOP_EPOCH = 10
+EARLY_STOP_EPOCH = 20
 EVAL_EPOCH = 20
 MODEL_SAVE_EPOCH = 100
 show_iter_num = 500
@@ -196,7 +196,8 @@ class EarlyStopping:
         self.counter = 0
         self.best_score = None
         self.early_stop = False
-        self.val_loss_min = np.Inf
+        #self.val_loss_min = np.Inf
+        self.val_loss_min = np.inf
 
     def __call__(self, val_loss):
         score = -val_loss
@@ -234,14 +235,14 @@ def main(train_loader, test_loader, num_writers):
     rec_opt = optim.Adam(filter(lambda p: p.requires_grad, model.rec.parameters()), lr=lr_rec)
     cla_opt = optim.Adam(filter(lambda p: p.requires_grad, model.cla.parameters()), lr=lr_cla)
 
-    early_stopping = EarlyStopping(patience=EARLY_STOP_EPOCH if EARLY_STOP_EPOCH else 10, verbose=True)
+    early_stopping = EarlyStopping(patience=EARLY_STOP_EPOCH if EARLY_STOP_EPOCH else 20, verbose=True)
 
     for epoch in range(CurriculumModelID, 50001):
         if epoch > 4000:
             global MODEL_SAVE_EPOCH
             MODEL_SAVE_EPOCH = 20
 
-        if epoch % 10 == 0 and epoch != 0:
+        if epoch % 20 == 0 and epoch != 0:
             train_loader, test_loader = all_data_loader()
 
         cer = train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch)

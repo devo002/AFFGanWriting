@@ -5,11 +5,14 @@ from torch import nn
 from blocks import LinearBlock, Conv2dBlock, ResBlocks, ActFirstResBlock
 from vgg_tro_channel3_modi import vgg19_bn
 from recognizer.models.encoder_vgg import Encoder as rec_encoder
+from recognizer.models.encoder_vgg import EfficientNetEncoder
 from recognizer.models.decoder import Decoder as rec_decoder
 from recognizer.models.seq2seq import Seq2Seq as rec_seq2seq
 from recognizer.models.attention import locationAttention as rec_attention
 from load_data import OUTPUT_MAX_LEN, IMG_HEIGHT, IMG_WIDTH, vocab_size, index2letter, num_tokens, tokens
 import cv2
+from torchvision.models import efficientnet_v2_s
+import torch.nn.functional as F
 
 gpu = torch.device('cuda')
 
@@ -185,7 +188,8 @@ class WriterClaModel(nn.Module):
 class GenModel_FC(nn.Module):
     def __init__(self, text_max_len):
         super(GenModel_FC, self).__init__()
-        self.enc_image = ImageEncoder().to(gpu)
+        #self.enc_image = ImageEncoder().to(gpu)
+        self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
         self.enc_text = TextEncoder_FC(text_max_len).to(gpu)
         self.dec = Decoder().to(gpu)
         self.linear_mix = nn.Linear(1024, 512)
@@ -220,10 +224,18 @@ class GenModel_FC(nn.Module):
     def mix(self, results, feat_embed):
         # for i in results:
         #     print(i.size())
-        feat_mix = torch.cat([results[-1], feat_embed], dim=1) # b,1024,8,27
-        f = feat_mix.permute(0, 2, 3, 1)
-        ff = self.linear_mix(f) # b,8,27,1024->b,8,27,512
-        return ff.permute(0, 3, 1, 2)
+        
+        feat_mix = torch.cat([results[-1], feat_embed], dim=1)  # b,C,H,W
+        f = feat_mix.permute(0, 2, 3, 1)                        # b,H,W,C
+        ff = self.linear_mix(f)                                # linear layer
+        return ff.permute(0, 3, 1, 2)                           # b,C,H,W
+        
+        
+        
+        #feat_mix = torch.cat([results[-1], feat_embed], dim=1) # b,1024,8,27
+        #f = feat_mix.permute(0, 2, 3, 1)
+        #ff = self.linear_mix(f) # b,8,27,1024->b,8,27,512
+        #return ff.permute(0, 3, 1, 2)
 
 class TextEncoder_FC(nn.Module):
     def __init__(self, text_max_len):
@@ -253,7 +265,10 @@ class TextEncoder_FC(nn.Module):
         xx_new = self.linear(xx) # b, text_max_len, 512
         ts = xx_new.shape[1]
         height_reps = f_xs_shape[-2]
-        width_reps = f_xs_shape[-1] // ts
+        
+        #width_reps = f_xs_shape[-1] // ts
+        width_reps = max(1, f_xs_shape[-1] // ts)
+        
         tensor_list = list()
         for i in range(ts):
             text = [xx_new[:, i:i + 1]] # b, text_max_len, 512
@@ -330,6 +345,131 @@ class ImageEncoder(nn.Module):
 
         return results
         # return cs
+        
+
+efficientnet_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_s-dd5fe13b.pth"
+
+
+class ImageEncoderEfficientNet(nn.Module):
+    def __init__(self, weight_path=None, in_channels=50):
+        super(ImageEncoderEfficientNet, self).__init__()
+        self.output_dim = 512
+        self.model = efficientnet_v2_s(weights=None)
+
+        # Load pretrained weights if provided
+        if weight_path:
+            state_dict = torch.load(weight_path, map_location="cpu")
+            self.model.load_state_dict(state_dict)
+
+        # Modify the first conv layer to accept `in_channels` instead of 3
+        first_conv = self.model.features[0][0]  # Assuming [Conv2d, BN, SiLU]
+        new_conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=first_conv.out_channels,
+            kernel_size=first_conv.kernel_size,
+            stride=first_conv.stride,
+            padding=first_conv.padding,
+            bias=first_conv.bias is not None
+        )
+
+        # Initialize weights smartly from original conv
+        with torch.no_grad():
+            if first_conv.weight.shape[1] == 3:
+                # Copy first 3 channels
+                new_conv.weight[:, :3] = first_conv.weight
+                # Initialize remaining channels by repeating channel 0 or average
+                if in_channels > 3:
+                    repeat_tensor = first_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
+                    new_conv.weight[:, 3:] = repeat_tensor
+
+        self.model.features[0][0] = new_conv
+
+        self.features = list(self.model.features.children())
+
+        # Helper function to get the last Conv2d out_channels from a block
+        def get_out_channels(block):
+            for layer in reversed(list(block.modules())):
+                if isinstance(layer, nn.Conv2d):
+                    return layer.out_channels
+            raise ValueError("No Conv2d layer found in block")
+
+        # Reduce selected intermediate outputs to 512 channels
+        self.reduce_layers = nn.ModuleList([
+            nn.Conv2d(get_out_channels(block), 512, kernel_size=1)
+            for i, block in enumerate(self.features)
+            if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1
+        ])
+
+        self.features = nn.Sequential(*self.features)
+
+    def encode_with_intermediate(self, x):
+        results = []
+        reduce_idx = 0
+        for i, block in enumerate(self.features):
+            x = block(x)
+            if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1:
+                reduced = self.reduce_layers[reduce_idx](x)
+                reduce_idx += 1
+                results.append(reduced)
+
+        # Resize final feature map to match [B, 512, 8, 27] like VGG
+        results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
+
+        return results[-6:]  # Keep last 6 feature maps
+
+    def forward(self, x):
+        return self.encode_with_intermediate(x)
+
+
+
+
+# class ImageEncoderEfficientNet(nn.Module):
+#     def __init__(self, weight_path=None):
+#         super(ImageEncoderEfficientNet, self).__init__()
+#         self.output_dim = 512
+#         self.model = efficientnet_v2_s(weights=None)
+
+#         if weight_path:
+#             state_dict = torch.load(weight_path, map_location="cpu")
+#             self.model.load_state_dict(state_dict)
+
+#         self.features = list(self.model.features.children())
+
+#         # Helper function to get the last Conv2d out_channels from a block
+#         def get_out_channels(block):
+#             for layer in reversed(list(block.modules())):
+#                 if isinstance(layer, nn.Conv2d):
+#                     return layer.out_channels
+#             raise ValueError("No Conv2d layer found in block")
+
+#         # Reduce all selected intermediate outputs to 512 channels
+#         self.reduce_layers = nn.ModuleList([
+#             nn.Conv2d(get_out_channels(block), 512, kernel_size=1)
+#             for i, block in enumerate(self.features)
+#             if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1
+#         ])
+
+#         self.features = nn.Sequential(*self.features)
+
+#     def encode_with_intermediate(self, x):
+#         results = []
+#         reduce_idx = 0
+#         for i, block in enumerate(self.features):
+#             x = block(x)
+#             if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1:
+#                 reduced = self.reduce_layers[reduce_idx](x)
+#                 reduce_idx += 1
+#                 results.append(reduced)
+
+#         # Resize final feature map to match [B, 512, 8, 27] like VGG
+#         results[-1] = nn.functional.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
+
+#         return results[-6:]  # Keep only last 6 layers like VGG
+
+#     def forward(self, x):
+#         return self.encode_with_intermediate(x)
+
+
 
 class Decoder(nn.Module):
     def __init__(self, ups=3, n_res=2, dim=512, out_dim=1, res_norm='adain', activ='relu', pad_type='reflect'):
@@ -360,7 +500,10 @@ class RecModel(nn.Module):
         super(RecModel, self).__init__()
         hidden_size_enc = hidden_size_dec = 512
         embed_size = 60
-        self.enc = rec_encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
+        
+        weight_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_s-dd5fe13b.pth"
+        self.enc = EfficientNetEncoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=weight_path).to(gpu)
+        #self.enc = rec_encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
         self.dec = rec_decoder(hidden_size_dec, embed_size, vocab_size, rec_attention, None).to(gpu)
         self.seq2seq = rec_seq2seq(self.enc, self.dec, OUTPUT_MAX_LEN, vocab_size).to(gpu)
         if pretrain:

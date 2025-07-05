@@ -187,21 +187,23 @@ if __name__ == '__main__':
 
     for i in range(1):
         if i == 0:
-            folder = folder_pre +model_epoch +'/res_1.in_vocab_tr_writer'
-            target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
-            text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+            
+            folder = folder_pre + model_epoch + '/res_4.oo_vocab_te_writer'
+            target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
+            text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/oov.common_words'
+              
         # elif i ==1:
-        #     folder = folder_pre + model_epoch + '/res_2.in_vocab_te_writer'
-        #     target_file = 'Groundtruth/gan.iam.test.gt.filter27'
-        #     text_corpus = 'corpora_english/in_vocab.subset.tro.37'
+        #     folder = folder_pre +model_epoch +'/res_1.in_vocab_tr_writer'
+        #      target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
+        #      text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
         # elif i == 2:
-        #     folder = folder_pre + model_epoch + '/res_3.oo_vocab_tr_writer'
-        #     target_file = 'Groundtruth/gan.iam.tr_va.gt.filter27'
-        #     text_corpus = 'corpora_english/oov.common_words'
+        #     folder = folder_pre + model_epoch + '/res_2.in_vocab_te_writer'
+        #     target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
+        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
         # elif i == 3:
-        #     folder = folder_pre + model_epoch + '/res_4.oo_vocab_te_writer'
-        #     target_file = 'Groundtruth/gan.iam.test.gt.filter27'
-        #     text_corpus = 'corpora_english/oov.common_words'
+        #     folder = folder_pre + model_epoch + '/res_3.oo_vocab_tr_writer'
+        #     target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
+        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/oov.common_words'
 
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -218,5 +220,5 @@ if __name__ == '__main__':
         for wid in wids:
             # print(wid)
             # test_writer(wid, 'save_weights/<your best model>')
-            test_writer(wid, '/home/vault/iwi5/iwi5333h/save_weights/contran-' + model_epoch + '.model', folder, text_corpus, data_dict)
+            test_writer(wid, '/home/vault/iwi5/iwi5333h/save_weights22/contran-' + model_epoch + '.model', folder, text_corpus, data_dict)
 

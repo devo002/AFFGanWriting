@@ -100,8 +100,16 @@ def get_activations(files, model, batch_size=50, dims=2048,
         end = i + batch_size
 
         '''tro image read'''
-        images = [cv2.imread(str(f)).astype(np.float32)
-                           for f in files[start:end]]
+        images = []
+        for f in files[start:end]:
+            img = cv2.imread(str(f))
+            if img is not None:
+                images.append(img.astype(np.float32))
+            else:
+                print(f"[Warning] Could not read image: {f}")
+
+        #images = [cv2.imread(str(f)).astype(np.float32)
+        #                   for f in files[start:end]]
 
         '''tro image crop'''
         images = [i[:, :64] for i in images]
