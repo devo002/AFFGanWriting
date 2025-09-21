@@ -4,6 +4,8 @@ from load_data import vocab_size, IMG_WIDTH, OUTPUT_MAX_LEN
 from modules_tro import GenModel_FC, DisModel, WriterClaModel, RecModel, write_image
 from loss_tro import recon_criterion, crit, log_softmax
 import numpy as np
+import torch.nn.functional as F
+
 
 w_dis = 1.
 w_cla = 1.
@@ -82,7 +84,6 @@ class ConTranModel(nn.Module):
             else:
                 l_l1 = recon_criterion(xg, img_xt)
 
-            '''rec loss'''
             cer_te, cer_te2 = cer_func
             pred_xt = self.rec(xg, label_xt, img_width=torch.from_numpy(np.array([IMG_WIDTH]*batch_size)))
             pred_xt_swap = self.rec(xg_swap, label_xt_swap, img_width=torch.from_numpy(np.array([IMG_WIDTH]*batch_size)))
@@ -93,6 +94,9 @@ class ConTranModel(nn.Module):
             cer_te.add(pred_xt, label_xt2)
             cer_te2.add(pred_xt_swap, label_xt2_swap)
             l_rec = (l_rec_ori + l_rec_swap) / 2.
+            
+            
+            
             '''fin'''
             l_total = w_dis * l_dis + w_cla * l_cla + w_l1 * l_l1 + w_rec * l_rec
             l_total.backward()
@@ -163,7 +167,8 @@ class ConTranModel(nn.Module):
                 cer_te.add(pred_xt, label_xt2)
                 cer_te2.add(pred_xt_swap, label_xt2_swap)
                 l_rec = (l_rec_ori + l_rec_swap) / 2.
-
+                
+                
                 '''writer classifier loss'''
                 l_cla_ori = self.cla(xg, tr_wid)
                 l_cla_swap = self.cla(xg_swap, tr_wid)

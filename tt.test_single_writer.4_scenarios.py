@@ -17,10 +17,10 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 folder_wids = '/home/woody/iwi5/iwi5333h/data'
 # img_base = '/home/WeiHongxi/WangHeng/project/dataset/Iam_database/words/'
 img_base = '/home/woody/iwi5/iwi5333h/data'
-folder_pre = '/home/vault/iwi5/iwi5333h/test_single_writer.44_scenarios/'
+folder_pre = '/home/vault/iwi5/iwi5333h/test_single_writer.190_scenarios/3000'
 # folder_pre = 'test_single_writer.4_scenarios_average/'
 #epoch = 5000
-epoch = 2300
+epoch = 3000
 
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -191,15 +191,18 @@ if __name__ == '__main__':
             folder = folder_pre + model_epoch + '/res_4.oo_vocab_te_writer'
             target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
             text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/oov.common_words'
+            
               
-        # elif i ==1:
-        #     folder = folder_pre +model_epoch +'/res_1.in_vocab_tr_writer'
-        #      target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
-        #      text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+        # elif i ==1:      
+        #    folder = folder_pre +model_epoch +'/res_1.in_vocab_tr_writer'
+         #    target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
+        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+            
         # elif i == 2:
         #     folder = folder_pre + model_epoch + '/res_2.in_vocab_te_writer'
-        #     target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
-        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+        #       target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
+        #       text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+
         # elif i == 3:
         #     folder = folder_pre + model_epoch + '/res_3.oo_vocab_tr_writer'
         #     target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
@@ -220,5 +223,5 @@ if __name__ == '__main__':
         for wid in wids:
             # print(wid)
             # test_writer(wid, 'save_weights/<your best model>')
-            test_writer(wid, '/home/vault/iwi5/iwi5333h/save_weights22/contran-' + model_epoch + '.model', folder, text_corpus, data_dict)
+            test_writer(wid, '/home/vault/iwi5/iwi5333h/save_weights/contran-' + model_epoch + '.model', folder, text_corpus, data_dict)
 

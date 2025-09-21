@@ -64,25 +64,12 @@ parser.add_argument('-c', '--gpu', default='', type=str,
 
 def get_activations(files, model, batch_size=50, dims=2048,
                     cuda=False, verbose=False):
-    """Calculates the activations of the pool_3 layer for all images.
+    """Calculates the activations of the pool_3 layer for all valid images.
 
-    Params:
-    -- files       : List of image files paths
-    -- model       : Instance of inception model
-    -- batch_size  : Batch size of images for the model to process at once.
-                     Make sure that the number of samples is a multiple of
-                     the batch size, otherwise some samples are ignored. This
-                     behavior is retained to match the original FID score
-                     implementation.
-    -- dims        : Dimensionality of features returned by Inception
-    -- cuda        : If set to True, use GPU
-    -- verbose     : If set to True and parameter out_step is given, the number
-                     of calculated batches is reported.
     Returns:
-    -- A numpy array of dimension (num images, dims) that contains the
-       activations of the given tensor when feeding inception with the
-       query tensor.
+    -- A numpy array of shape (num_valid_images, dims)
     """
+
     model.eval()
 
     if batch_size > len(files):
@@ -90,52 +77,137 @@ def get_activations(files, model, batch_size=50, dims=2048,
                'Setting batch size to data size'))
         batch_size = len(files)
 
-    pred_arr = np.empty((len(files), dims))
+    pred_arr = np.empty((len(files), dims), dtype=np.float32)
+    current_idx = 0  # Tracks number of valid activations written
 
     for i in tqdm(range(0, len(files), batch_size)):
-        #if verbose:
-        #    print('\rPropagating batch %d/%d' % (i + 1, n_batches),
-        #          end='', flush=True)
         start = i
         end = i + batch_size
 
-        '''tro image read'''
         images = []
+        valid_files = []
+
         for f in files[start:end]:
             img = cv2.imread(str(f))
             if img is not None:
                 images.append(img.astype(np.float32))
+                valid_files.append(f)
             else:
                 print(f"[Warning] Could not read image: {f}")
 
-        #images = [cv2.imread(str(f)).astype(np.float32)
-        #                   for f in files[start:end]]
+        if len(images) == 0:
+            continue  # Skip this batch entirely
 
-        '''tro image crop'''
+        # Optional preprocessing (crop and resize to 64x64)
         images = [i[:, :64] for i in images]
         images = np.array([cv2.resize(i, (64, 64), interpolation=cv2.INTER_AREA) for i in images])
 
-        # Reshape to (n_images, 3, height, width)
+        # Convert to NCHW and normalize to [0, 1]
         images = images.transpose((0, 3, 1, 2))
-        images /= 255
+        images /= 255.0
 
         batch = torch.from_numpy(images).type(torch.FloatTensor)
         if cuda:
             batch = batch.cuda()
 
-        pred = model(batch)[0]
+        with torch.no_grad():
+            pred = model(batch)[0]
+            if pred.size(2) != 1 or pred.size(3) != 1:
+                pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
 
-        # If model output is not scalar, apply global spatial average pooling.
-        # This happens if you choose a dimensionality not equal 2048.
-        if pred.size(2) != 1 or pred.size(3) != 1:
-            pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
+        pred_np = pred.cpu().data.numpy().reshape(pred.size(0), -1)
 
-        pred_arr[start:end] = pred.cpu().data.numpy().reshape(pred.size(0), -1)
+        # Write only valid entries
+        pred_arr[current_idx:current_idx + pred_np.shape[0]] = pred_np
+        current_idx += pred_np.shape[0]
+
+    pred_arr = pred_arr[:current_idx]  # Trim unused rows
 
     if verbose:
-        print(' done')
+        print(f"Extracted activations for {current_idx} valid images")
 
     return pred_arr
+
+
+
+
+
+                        #old code
+
+# def get_activations(files, model, batch_size=50, dims=2048,
+#                     cuda=False, verbose=False):
+#     """Calculates the activations of the pool_3 layer for all images.
+
+#     Params:
+#     -- files       : List of image files paths
+#     -- model       : Instance of inception model
+#     -- batch_size  : Batch size of images for the model to process at once.
+#                      Make sure that the number of samples is a multiple of
+#                      the batch size, otherwise some samples are ignored. This
+#                      behavior is retained to match the original FID score
+#                      implementation.
+#     -- dims        : Dimensionality of features returned by Inception
+#     -- cuda        : If set to True, use GPU
+#     -- verbose     : If set to True and parameter out_step is given, the number
+#                      of calculated batches is reported.
+#     Returns:
+#     -- A numpy array of dimension (num images, dims) that contains the
+#        activations of the given tensor when feeding inception with the
+#        query tensor.
+#     """
+#     model.eval()
+
+#     if batch_size > len(files):
+#         print(('Warning: batch size is bigger than the data size. '
+#                'Setting batch size to data size'))
+#         batch_size = len(files)
+
+#     pred_arr = np.empty((len(files), dims))
+
+#     for i in tqdm(range(0, len(files), batch_size)):
+#         #if verbose:
+#         #    print('\rPropagating batch %d/%d' % (i + 1, n_batches),
+#         #          end='', flush=True)
+#         start = i
+#         end = i + batch_size
+
+#         '''tro image read'''
+#         images = []
+#         for f in files[start:end]:
+#             img = cv2.imread(str(f))
+#             if img is not None:
+#                 images.append(img.astype(np.float32))
+#             else:
+#                 print(f"[Warning] Could not read image: {f}")
+
+#         #images = [cv2.imread(str(f)).astype(np.float32)
+#         #                   for f in files[start:end]]
+
+#         '''tro image crop'''
+#         images = [i[:, :64] for i in images]
+#         images = np.array([cv2.resize(i, (64, 64), interpolation=cv2.INTER_AREA) for i in images])
+
+#         # Reshape to (n_images, 3, height, width)
+#         images = images.transpose((0, 3, 1, 2))
+#         images /= 255
+
+#         batch = torch.from_numpy(images).type(torch.FloatTensor)
+#         if cuda:
+#             batch = batch.cuda()
+
+#         pred = model(batch)[0]
+
+#         # If model output is not scalar, apply global spatial average pooling.
+#         # This happens if you choose a dimensionality not equal 2048.
+#         if pred.size(2) != 1 or pred.size(3) != 1:
+#             pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
+
+#         pred_arr[start:end] = pred.cpu().data.numpy().reshape(pred.size(0), -1)
+
+#     if verbose:
+#         print(' done')
+
+#     return pred_arr
 
 
 def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):

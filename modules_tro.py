@@ -4,15 +4,26 @@ import torch
 from torch import nn
 from blocks import LinearBlock, Conv2dBlock, ResBlocks, ActFirstResBlock
 from vgg_tro_channel3_modi import vgg19_bn
+#from Resnet18 import ResNet18
 from recognizer.models.encoder_vgg import Encoder as rec_encoder
-from recognizer.models.encoder_vgg import EfficientNetEncoder
+#from recognizer.models.encoder_vgg import EncoderResnet
+#from recognizer.models.encoder_vgg import EfficientNetEncoder
+#from recognizer.models.encoder_vgg import ResNet50Encoder
 from recognizer.models.decoder import Decoder as rec_decoder
-from recognizer.models.seq2seq import Seq2Seq as rec_seq2seq
+#from recognizer.models.encoder_vgg import VGG19Encoder
+from recognizer.models.seq2seqnew2 import Seq2Seq as rec_seq2seq
 from recognizer.models.attention import locationAttention as rec_attention
 from load_data import OUTPUT_MAX_LEN, IMG_HEIGHT, IMG_WIDTH, vocab_size, index2letter, num_tokens, tokens
 import cv2
-from torchvision.models import efficientnet_v2_s
+#from torchvision.models import efficientnet_v2_s
+#from torchvision.models import efficientnet_v2_l
 import torch.nn.functional as F
+#from torchvision.models import resnet50, resnet18, convnext_tiny 
+from torchvision.models.feature_extraction import create_feature_extractor
+#from torchvision.models.vision_transformer import vit_b_16, ViT_B_16_Weights
+from trocr_recognizer import TrOCRRecModel
+#from recognizer.models.encoder_vgg import EfficientNetB7Encoder
+
 
 gpu = torch.device('cuda')
 
@@ -29,7 +40,7 @@ def fine(label_list):
         return label_list
 
 def write_image(xg, pred_label, gt_img, gt_label, tr_imgs, xg_swap, pred_label_swap, gt_label_swap, title, num_tr=2):
-    folder = '/home/vault/iwi5/iwi5333h/imgs'
+    folder = '/home/woody/iwi5/iwi5333h/img1'
     if not os.path.exists(folder):
         os.makedirs(folder)
     batch_size = gt_label.shape[0]
@@ -188,9 +199,14 @@ class WriterClaModel(nn.Module):
 class GenModel_FC(nn.Module):
     def __init__(self, text_max_len):
         super(GenModel_FC, self).__init__()
-        #self.enc_image = ImageEncoder().to(gpu)
-        self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
+        self.enc_image = ImageEncoder().to(gpu)
+        #self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
+        #self.enc_image = ResNet18().to(gpu)
+        #self.enc_image = ResNet18(nb_feat=384, in_channels=50).to(gpu)
+        #self.enc_image = ConvNeXtTiny(weight_path=convnext_weights, in_channels=50).to(gpu)
+        #self.enc_image = ImageEncoderResNet50(weight_path=resnet50_weights_path, in_channels=50).to(gpu)
         self.enc_text = TextEncoder_FC(text_max_len).to(gpu)
+        
         self.dec = Decoder().to(gpu)
         self.linear_mix = nn.Linear(1024, 512)
         self.max_conv = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -208,7 +224,7 @@ class GenModel_FC(nn.Module):
                 if (i == 1):
                     m.input = self.max_conv(results[3])
                 elif (i == 3):
-                    m.input = results[4]
+                    m.input = results[4] #change here for the resnet with few layers
                 if adain_params.size(1) > 2 * m.num_features:
                     adain_params = adain_params[:, 2 * m.num_features:]
                 i += 1
@@ -346,79 +362,163 @@ class ImageEncoder(nn.Module):
         return results
         # return cs
         
+    
+    
+#efficientnet_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_s-dd5fe13b.pth"
+# efficientnet_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_l-59c71312.pth"
 
-efficientnet_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_s-dd5fe13b.pth"
+
+# class ImageEncoderEfficientNet(nn.Module):
+#     def __init__(self, weight_path=None, in_channels=50):
+#         super(ImageEncoderEfficientNet, self).__init__()
+#         self.output_dim = 512
+#         self.model = efficientnet_v2_l(weights=None)
+
+#         # Load pretrained weights if provided
+#         if weight_path:
+#             state_dict = torch.load(weight_path, map_location="cpu")
+#             self.model.load_state_dict(state_dict)
+
+#         # Modify the first conv layer to accept `in_channels` instead of 3
+#         first_conv = self.model.features[0][0]  # Assuming [Conv2d, BN, SiLU]
+#         new_conv = nn.Conv2d(
+#             in_channels=in_channels,
+#             out_channels=first_conv.out_channels,
+#             kernel_size=first_conv.kernel_size,
+#             stride=first_conv.stride,
+#             padding=first_conv.padding,
+#             bias=first_conv.bias is not None
+#         )
+
+#         # Initialize weights smartly from original conv
+#         with torch.no_grad():
+#             if first_conv.weight.shape[1] == 3:
+#                 # Copy first 3 channels
+#                 new_conv.weight[:, :3] = first_conv.weight
+#                 # Initialize remaining channels by repeating channel 0 or average
+#                 if in_channels > 3:
+#                     repeat_tensor = first_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
+#                     new_conv.weight[:, 3:] = repeat_tensor
+
+#         self.model.features[0][0] = new_conv
+
+#         self.features = list(self.model.features.children())
+        
+#         # for i, block in enumerate(self.model.features):
+#         #     if i < 2:
+#         #         for param in block.parameters():
+#         #             param.requires_grad = False
+
+#         # Helper function to get the last Conv2d out_channels from a block
+#         def get_out_channels(block):
+#             for layer in reversed(list(block.modules())):
+#                 if isinstance(layer, nn.Conv2d):
+#                     return layer.out_channels
+#             raise ValueError("No Conv2d layer found in block")
+
+#         # Reduce selected intermediate outputs to 512 channels
+#         self.reduce_layers = nn.ModuleList([
+#             nn.Conv2d(get_out_channels(block), 512, kernel_size=1)
+#             for i, block in enumerate(self.features)
+#             #if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1
+#             if i in [1, 2, 3, 4, 5]
+#         ])
+
+#         self.features = nn.Sequential(*self.features)
+
+#     def encode_with_intermediate(self, x):
+#         results = []
+#         reduce_idx = 0
+#         for i, block in enumerate(self.features):
+#             x = block(x)
+#             #if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1:
+#             if i in [1, 2, 3, 4, 5]:
+#                 reduced = self.reduce_layers[reduce_idx](x)
+#                 reduce_idx += 1
+#                 results.append(reduced)
+
+#         # Resize final feature map to match [B, 512, 8, 27] like VGG
+#         results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
+
+#         return results[-5:]  # use -6 for adding another block
+
+#     def forward(self, x):
+#         return self.encode_with_intermediate(x)
 
 
-class ImageEncoderEfficientNet(nn.Module):
-    def __init__(self, weight_path=None, in_channels=50):
-        super(ImageEncoderEfficientNet, self).__init__()
-        self.output_dim = 512
-        self.model = efficientnet_v2_s(weights=None)
+# resnet50_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet50-0676ba61.pth"
+# #resnet50_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet18-f37072fd.pth"
+# #for the generator
+# class ImageEncoderResNet50(nn.Module):
+#     def __init__(self, weight_path=None, in_channels=50):
+#         super(ImageEncoderResNet50, self).__init__()
+#         self.output_dim = 512
 
-        # Load pretrained weights if provided
-        if weight_path:
-            state_dict = torch.load(weight_path, map_location="cpu")
-            self.model.load_state_dict(state_dict)
+#         # Load ResNet50 with no weights initially
+#         self.model = resnet50(weights=None)
 
-        # Modify the first conv layer to accept `in_channels` instead of 3
-        first_conv = self.model.features[0][0]  # Assuming [Conv2d, BN, SiLU]
-        new_conv = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=first_conv.out_channels,
-            kernel_size=first_conv.kernel_size,
-            stride=first_conv.stride,
-            padding=first_conv.padding,
-            bias=first_conv.bias is not None
-        )
+#         # Load local pretrained weights if provided
+#         if weight_path:
+#             state_dict = torch.load(weight_path, map_location="cpu")
+#             self.model.load_state_dict(state_dict)
 
-        # Initialize weights smartly from original conv
-        with torch.no_grad():
-            if first_conv.weight.shape[1] == 3:
-                # Copy first 3 channels
-                new_conv.weight[:, :3] = first_conv.weight
-                # Initialize remaining channels by repeating channel 0 or average
-                if in_channels > 3:
-                    repeat_tensor = first_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
-                    new_conv.weight[:, 3:] = repeat_tensor
+#         # Modify the first conv layer to accept custom input channels
+#         original_conv = self.model.conv1
+#         new_conv = nn.Conv2d(
+#             in_channels=in_channels,
+#             out_channels=original_conv.out_channels,
+#             kernel_size=original_conv.kernel_size,
+#             stride=original_conv.stride,
+#             padding=original_conv.padding,
+#             bias=original_conv.bias is not None
+#         )
+#         with torch.no_grad():
+#             new_conv.weight[:, :3] = original_conv.weight
+#             if in_channels > 3:
+#                 repeat_tensor = original_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
+#                 new_conv.weight[:, 3:] = repeat_tensor
+#         self.model.conv1 = new_conv
 
-        self.model.features[0][0] = new_conv
+#         # Select intermediate feature layers
+#         return_nodes = {
+#             'relu': 'feat1',
+#             'layer1': 'feat2',
+#             'layer2': 'feat3',
+#             'layer3': 'feat4',
+#             'layer4': 'feat5'
+#         }
+#         self.extractor = create_feature_extractor(self.model, return_nodes=return_nodes)
 
-        self.features = list(self.model.features.children())
 
-        # Helper function to get the last Conv2d out_channels from a block
-        def get_out_channels(block):
-            for layer in reversed(list(block.modules())):
-                if isinstance(layer, nn.Conv2d):
-                    return layer.out_channels
-            raise ValueError("No Conv2d layer found in block")
+#         # self.reduce_layers = nn.ModuleList([
+#         #      nn.Conv2d(64, 512, kernel_size=1),   # relu
+#         #      nn.Conv2d(64, 512, kernel_size=1),   # layer1
+#         #      nn.Conv2d(128, 512, kernel_size=1),  # layer2
+#         #      nn.Conv2d(256, 512, kernel_size=1),  # layer3
+#         #      nn.Conv2d(512, 512, kernel_size=1),  # layer4
+#         #         ])
+#         # use for resnet50
+#         self.reduce_layers = nn.ModuleList([
+#             nn.Conv2d(64, 512, kernel_size=1),
+#             nn.Conv2d(256, 512, kernel_size=1),
+#             nn.Conv2d(512, 512, kernel_size=1),
+#             nn.Conv2d(1024, 512, kernel_size=1),
+#             nn.Conv2d(2048, 512, kernel_size=1),  
+#         ])
 
-        # Reduce selected intermediate outputs to 512 channels
-        self.reduce_layers = nn.ModuleList([
-            nn.Conv2d(get_out_channels(block), 512, kernel_size=1)
-            for i, block in enumerate(self.features)
-            if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1
-        ])
+#     def encode_with_intermediate(self, x):
+#         features = self.extractor(x)
+#         results = []
+#         for i, key in enumerate(['feat1', 'feat2', 'feat3', 'feat4', 'feat5']): # add feat5 for the layer4
+#             reduced = self.reduce_layers[i](features[key])
+#             results.append(reduced)
 
-        self.features = nn.Sequential(*self.features)
+#         # Resize final feature map to match VGG output shape
+#         results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
+#         return results
 
-    def encode_with_intermediate(self, x):
-        results = []
-        reduce_idx = 0
-        for i, block in enumerate(self.features):
-            x = block(x)
-            if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1:
-                reduced = self.reduce_layers[reduce_idx](x)
-                reduce_idx += 1
-                results.append(reduced)
-
-        # Resize final feature map to match [B, 512, 8, 27] like VGG
-        results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
-
-        return results[-6:]  # Keep last 6 feature maps
-
-    def forward(self, x):
-        return self.encode_with_intermediate(x)
+#     def forward(self, x):
+#         return self.encode_with_intermediate(x)
 
 
 
@@ -427,7 +527,7 @@ class ImageEncoderEfficientNet(nn.Module):
 #     def __init__(self, weight_path=None):
 #         super(ImageEncoderEfficientNet, self).__init__()
 #         self.output_dim = 512
-#         self.model = efficientnet_v2_s(weights=None)
+#         self.model = efficientnet_v2_l(weights=None)
 
 #         if weight_path:
 #             state_dict = torch.load(weight_path, map_location="cpu")
@@ -501,9 +601,15 @@ class RecModel(nn.Module):
         hidden_size_enc = hidden_size_dec = 512
         embed_size = 60
         
-        weight_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_s-dd5fe13b.pth"
-        self.enc = EfficientNetEncoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=weight_path).to(gpu)
-        #self.enc = rec_encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
+        #weight_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_l-59c71312.pth"
+        weight_path = "/home/woody/iwi5/iwi5333h/model/vgg19_bn-c79401a0.pth"
+        #efficientnet_b7_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_b7_lukemelas-c5b4e57e.pth"
+        #self.enc = ResNet50Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=resnet50_weights_path).to(gpu)
+        #self.enc = EfficientNetEncoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=efficientnet_weights_path).to(gpu)
+        self.enc = rec_encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
+        #self.enc = EncoderResnet(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
+        #self.enc = EfficientNetB7Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH,True, None, False, weight_path=efficientnet_b7_weights_path).to(gpu)
+        #self.enc = VGG19Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH,True, None, False, weight_path=weight_path).to(gpu)
         self.dec = rec_decoder(hidden_size_dec, embed_size, vocab_size, rec_attention, None).to(gpu)
         self.seq2seq = rec_seq2seq(self.enc, self.dec, OUTPUT_MAX_LEN, vocab_size).to(gpu)
         if pretrain:
@@ -514,8 +620,51 @@ class RecModel(nn.Module):
     def forward(self, img, label, img_width):
         self.seq2seq.train()
         img = torch.cat([img,img,img], dim=1) # b,1,64,128->b,3,64,128
-        output, attn_weights = self.seq2seq(img, label, img_width, teacher_rate=False, train=False)
+        output, attn_weights = self.seq2seq(img, label, img_width, teacher_rate=False, train=False, beam_size=3)
         return output.permute(1, 0, 2) # t,b,83->b,t,83
+
+
+#LOCAL_CKPT = "/home/woody/iwi5/iwi5333h/model/trocr-base-handwritten"
+#DEFAULT_CKPT = LOCAL_CKPT  # or "microsoft/trocr-base-handwritten"
+
+# class RecModel(nn.Module):
+#     """
+#     Wrapper around TrOCRRecModel that:
+#       - Returns raw logits in *your* vocab: [B, T, vocab_size]
+#       - Keeps TrOCR weights frozen (requires_grad=False)
+#       - Forces TrOCR to stay in eval() even when parent calls train()
+#     """
+#     def __init__(self, pretrain: bool = False, ckpt: str = DEFAULT_CKPT, local_only: bool = True):
+#         super().__init__()
+#         # TrOCRRecModel itself freezes params and sets eval(); gradients still flow to the image.
+#         self.rec = TrOCRRecModel(ckpt=ckpt, local_only=local_only)
+
+#     def forward(self, img: torch.Tensor, label: torch.Tensor, img_width=None) -> torch.Tensor:
+#         # img:   [B, 1, H, W]  (grayscale, your pipeline)
+#         # label: [B, T]        (your vocab indices incl. <GO>, PAD, etc.)
+#         # returns logits: [B, T, vocab_size]
+#         return self.rec(img, label, img_width)
+
+#     def train(self, mode: bool = True):
+#         """
+#         Keep TrOCR frozen/inference-mode regardless of parent mode.
+#         This preserves dropout/bn behavior inside TrOCR and avoids accidental unfreezing.
+#         """
+#         super().train(mode)
+#         # Ensure the underlying TrOCR stays eval() no matter what
+#         if hasattr(self.rec, "model"):
+#             self.rec.model.eval()
+#         return self
+
+#     @torch.no_grad()
+#     def decode(self, img: torch.Tensor, beam_size: int = 5, max_new_tokens: int = 128):
+#         """
+#         Optional convenience passthrough for qualitative checks.
+#         """
+#         if hasattr(self.rec, "decode"):
+#             return self.rec.decode(img, beam_size=beam_size, max_new_tokens=max_new_tokens)
+#         raise AttributeError("Underlying recognizer does not implement decode().")
+
 
 
 class MLP(nn.Module):
