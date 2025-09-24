@@ -4,7 +4,7 @@ import cv2
 import pathlib
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import time
-
+import torch
 import logging
 import numpy as np
 import torch
@@ -21,6 +21,8 @@ except ImportError:
     def tqdm(x): return x
 
 from inception import InceptionV3
+
+
 
 def log(msg,logpath):
     logFilname = '/log.txt'
@@ -348,6 +350,7 @@ if __name__ == '__main__':
         info = 'EPOCH: {} - FID: {} '.format(epoch,fid_value)
         # print('FID: {}'.format(fid_value))
     else:
-        info = 'WID: {} ; in_oov: {} ; FID: {}'.format(wid, x, fid_value)
+        #info = 'WID: {} ; in_oov: {} ; FID: {}'.format(wid, x, fid_value)
+        info = f'in_oov: {x} ; FID: {fid_value}'
     log(info,father_path)
 

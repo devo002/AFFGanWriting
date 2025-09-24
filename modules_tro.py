@@ -22,6 +22,8 @@ import torch.nn.functional as F
 from torchvision.models.feature_extraction import create_feature_extractor
 #from torchvision.models.vision_transformer import vit_b_16, ViT_B_16_Weights
 from trocr_recognizer import TrOCRRecModel
+from inception import ImageEncoderInceptionV3
+from inceptionrecognizer import EncoderInception
 #from recognizer.models.encoder_vgg import EfficientNetB7Encoder
 
 
@@ -40,7 +42,7 @@ def fine(label_list):
         return label_list
 
 def write_image(xg, pred_label, gt_img, gt_label, tr_imgs, xg_swap, pred_label_swap, gt_label_swap, title, num_tr=2):
-    folder = '/home/woody/iwi5/iwi5333h/img1'
+    folder = '/home/woody/iwi5/iwi5333h/img'
     if not os.path.exists(folder):
         os.makedirs(folder)
     batch_size = gt_label.shape[0]
@@ -195,11 +197,13 @@ class WriterClaModel(nn.Module):
         loss = self.cross_entropy(out.squeeze(-1).squeeze(-1), y)
         return loss
 
+inception_weights = "/home/woody/iwi5/iwi5333h/model/inception_v3_imagenet1k_v1.pth"
 
 class GenModel_FC(nn.Module):
     def __init__(self, text_max_len):
         super(GenModel_FC, self).__init__()
-        self.enc_image = ImageEncoder().to(gpu)
+        #self.enc_image = ImageEncoder().to(gpu)
+        self.enc_image = ImageEncoderInceptionV3(weight_path=inception_weights).to(gpu)
         #self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
         #self.enc_image = ResNet18().to(gpu)
         #self.enc_image = ResNet18(nb_feat=384, in_channels=50).to(gpu)
@@ -445,10 +449,10 @@ class ImageEncoder(nn.Module):
 #     def forward(self, x):
 #         return self.encode_with_intermediate(x)
 
-
+# resnet18_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet18-f37072fd.pth"
 # resnet50_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet50-0676ba61.pth"
-# #resnet50_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet18-f37072fd.pth"
-# #for the generator
+
+# # #for the generator
 # class ImageEncoderResNet50(nn.Module):
 #     def __init__(self, weight_path=None, in_channels=50):
 #         super(ImageEncoderResNet50, self).__init__()
@@ -600,13 +604,14 @@ class RecModel(nn.Module):
         super(RecModel, self).__init__()
         hidden_size_enc = hidden_size_dec = 512
         embed_size = 60
-        
+        INCP_WEIGHTS = "/home/woody/iwi5/iwi5333h/model/inception_v3_imagenet1k_v1.pth"
         #weight_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_l-59c71312.pth"
-        weight_path = "/home/woody/iwi5/iwi5333h/model/vgg19_bn-c79401a0.pth"
+        #weight_path = "/home/woody/iwi5/iwi5333h/model/vgg19_bn-c79401a0.pth"
         #efficientnet_b7_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_b7_lukemelas-c5b4e57e.pth"
         #self.enc = ResNet50Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=resnet50_weights_path).to(gpu)
         #self.enc = EfficientNetEncoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=efficientnet_weights_path).to(gpu)
         self.enc = rec_encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
+        #self.enc = EncoderInception(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weights_path=INCP_WEIGHTS, in_channels=3,output_stride=16,map_location="cpu").to(gpu)
         #self.enc = EncoderResnet(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
         #self.enc = EfficientNetB7Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH,True, None, False, weight_path=efficientnet_b7_weights_path).to(gpu)
         #self.enc = VGG19Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH,True, None, False, weight_path=weight_path).to(gpu)

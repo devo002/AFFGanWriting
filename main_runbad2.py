@@ -115,7 +115,7 @@ CurriculumModelID = args.start_epoch
 model_name = 'aaa'
 run_id = datetime.strftime(datetime.now(), '%m-%d-%H-%M')
 base_logdir = '/home/woody/iwi5/iwi5333h'
-logdir = os.path.join(base_logdir, 'log1', model_name + '-' + str(run_id))
+logdir = os.path.join(base_logdir, 'log', model_name + '-' + str(run_id))
 os.makedirs(logdir, exist_ok=True)
 writer = SummaryWriter(logdir)
 
@@ -315,7 +315,7 @@ class EarlyStopping:
 # ---------------- Main loop ----------------
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
-    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights'
+    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights1'
     os.makedirs(folder_weights, exist_ok=True)
 
     if CurriculumModelID > 0:
@@ -335,8 +335,8 @@ def main(train_loader, test_loader, num_writers):
         patience=EARLY_STOP_EPOCH if EARLY_STOP_EPOCH else 20, verbose=True
     )
 
-    for epoch in range(CurriculumModelID, 50001):
-        if epoch > 4000:
+    for epoch in range(CurriculumModelID, 60001):
+        if epoch > 6000:
             global MODEL_SAVE_EPOCH
             MODEL_SAVE_EPOCH = 20
 

@@ -2,16 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
-
-try:
-    from torchvision.models.utils import load_state_dict_from_url
-except ImportError:
-    from torch.utils.model_zoo import load_url as load_state_dict_from_url
+import os
+from torch.hub import load_state_dict_from_url
 
 # Inception weights ported to Pytorch from
 # http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz
 FID_WEIGHTS_URL = 'https://github.com/mseitzer/pytorch-fid/releases/download/fid_weights/pt_inception-2015-12-05-6726825d.pth'
-
+FID_WEIGHTS_LOCAL = os.environ.get(
+    "FID_WEIGHTS_PATH",
+    "/home/woody/iwi5/iwi5333h/model/pt_inception-2015-12-05-6726825d.pth"
+)
 
 class InceptionV3(nn.Module):
     """Pretrained InceptionV3 network returning feature maps"""
@@ -185,7 +185,16 @@ def fid_inception_v3():
     inception.Mixed_7b = FIDInceptionE_1(1280)
     inception.Mixed_7c = FIDInceptionE_2(2048)
 
-    state_dict = load_state_dict_from_url(FID_WEIGHTS_URL, progress=True)
+    #state_dict = load_state_dict_from_url(FID_WEIGHTS_LOCAL, progress=True)
+    local_weights = "/home/woody/iwi5/iwi5333h/model/pt_inception-2015-12-05-6726825d.pth"
+
+    if os.path.isfile(local_weights):
+    # load the weights you already downloaded
+        state_dict = torch.load(local_weights, map_location="cpu")
+    else:
+    # fallback to download only if the local file is missing
+        from torch.hub import load_state_dict_from_url
+        state_dict = load_state_dict_from_url(FID_WEIGHTS_URL, progress=True)
     inception.load_state_dict(state_dict)
     return inception
 
