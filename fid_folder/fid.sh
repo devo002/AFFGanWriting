@@ -1,4 +1,4 @@
-python3 /home/woody/iwi5/iwi5333h/AFFGanWriting/fid_folder/fid_score_crop64x64.py --gpu 0 --batch-size=16 /home/woody/iwi5/iwi5333h/checkwords2/2700/res_4.oo_vocab_te_writer /home/woody/iwi5/iwi5333h/fid
+python3 /home/woody/iwi5/iwi5333h/AFFGanWriting/fid_folder/fid_score_crop64x64.py --gpu 0 --batch-size=16 /home/woody/iwi5/iwi5333h/checkwords/3600/res_4.oo_vocab_te_writer /home/woody/iwi5/iwi5333h/fid
 #python3 /home/woody/iwi5/iwi5333h/AFFGanWriting/fid_folder/fid_score_crop64x64.py --gpu 0 --batch-size=16 /home/vault/iwi5/iwi5333h/test_single_writer.44_scenarios/2300/res_2.in_vocab_te_writer /home/woody/iwi5/iwi5333h/testdata
 #python3 /home/woody/iwi5/iwi5333h/AFFGanWriting/fid_folder/fid_score_crop64x64.py --gpu 0 --batch-size=16 /home/vault/iwi5/iwi5333h/test_single_writer.44_scenarios/2300/res_3.oo_vocab_tr_writer /home/woody/iwi5/iwi5333h/testdata
 #python3 /home/woody/iwi5/iwi5333h/AFFGanWriting/fid_folder/fid_score_crop64x64.py --gpu 0 --batch-size=16 /home/vault/iwi5/iwi5333h/test_single_writer.44_scenarios/2300/res_4.oo_vocab_te_writer /home/woody/iwi5/iwi5333h/testdata

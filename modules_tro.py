@@ -6,6 +6,7 @@ from blocks import LinearBlock, Conv2dBlock, ResBlocks, ActFirstResBlock
 from vgg_tro_channel3_modi import vgg19_bn
 #from Resnet18 import ResNet18
 from recognizer.models.encoder_vgg import Encoder as rec_encoder
+from recognizer.models.dinorec import RecDecoderDINOv2
 #from recognizer.models.encoder_vgg import EncoderResnet
 #from recognizer.models.encoder_vgg import EfficientNetEncoder
 #from recognizer.models.encoder_vgg import ResNet50Encoder
@@ -23,6 +24,7 @@ from torchvision.models.feature_extraction import create_feature_extractor
 #from torchvision.models.vision_transformer import vit_b_16, ViT_B_16_Weights
 from trocr_recognizer import TrOCRRecModel
 from inception import ImageEncoderInceptionV3
+from dinomodel import ImageEncoderDINOv2
 from inceptionrecognizer import EncoderInception
 #from recognizer.models.encoder_vgg import EfficientNetB7Encoder
 
@@ -198,12 +200,16 @@ class WriterClaModel(nn.Module):
         return loss
 
 inception_weights = "/home/woody/iwi5/iwi5333h/model/inception_v3_imagenet1k_v1.pth"
+repo_dir  = "/home/woody/iwi5/iwi5333h/facebookresearch_dinov2_main"
+ckpt_path = "/home/woody/iwi5/iwi5333h/model/dinov2_vitl14_pretrain.pth"
+#ckpt_path2 = "/home/woody/iwi5/iwi5333h/model/dinov2_vits14_pretrain.pth"
 
 class GenModel_FC(nn.Module):
     def __init__(self, text_max_len):
         super(GenModel_FC, self).__init__()
-        #self.enc_image = ImageEncoder().to(gpu)
-        self.enc_image = ImageEncoderInceptionV3(weight_path=inception_weights).to(gpu)
+        self.enc_image = ImageEncoder().to(gpu)
+        #self.enc_image = ImageEncoderInceptionV3(weight_path=inception_weights).to(gpu)
+        #self.enc_image = ImageEncoderDINOv2(repo_dir=repo_dir,arch="vitl14",ckpt_path=ckpt_path,in_channels=50,final_size=(8, 27),tap_blocks=[4, 8, 16, 23]).to(gpu)
         #self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
         #self.enc_image = ResNet18().to(gpu)
         #self.enc_image = ResNet18(nb_feat=384, in_channels=50).to(gpu)
@@ -611,6 +617,7 @@ class RecModel(nn.Module):
         #self.enc = ResNet50Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=resnet50_weights_path).to(gpu)
         #self.enc = EfficientNetEncoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weight_path=efficientnet_weights_path).to(gpu)
         self.enc = rec_encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
+        #self.enc = RecDecoderDINOv2(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, bgru=True, step=None, flip=False, repo_dir=repo_dir,ckpt_path=ckpt_path, arch="vits14").to(gpu)
         #self.enc = EncoderInception(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False, weights_path=INCP_WEIGHTS, in_channels=3,output_stride=16,map_location="cpu").to(gpu)
         #self.enc = EncoderResnet(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH, True, None, False).to(gpu)
         #self.enc = EfficientNetB7Encoder(hidden_size_enc, IMG_HEIGHT, IMG_WIDTH,True, None, False, weight_path=efficientnet_b7_weights_path).to(gpu)

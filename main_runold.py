@@ -37,7 +37,7 @@ LABEL_SMOOTH = True
 Bi_GRU = True
 VISUALIZE_TRAIN = True
 
-BATCH_SIZE = 4
+BATCH_SIZE = 8
 lr_dis = 1 * 1e-4
 lr_gen = 1 * 1e-4
 lr_rec =1 * 1e-5
@@ -47,7 +47,7 @@ CurriculumModelID = args.start_epoch
 model_name = 'aaa'
 run_id = datetime.strftime(datetime.now(), '%m-%d-%H-%M')
 base_logdir = '/home/woody/iwi5/iwi5333h'
-logdir = os.path.join(base_logdir, 'log11', model_name + '-' + str(run_id))
+logdir = os.path.join(base_logdir, 'log3', model_name + '-' + str(run_id))
 os.makedirs(logdir, exist_ok=True)
 writer = SummaryWriter(logdir)
 
@@ -233,7 +233,7 @@ class EarlyStopping:
 
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
-    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights11'
+    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights3'
     os.makedirs(folder_weights, exist_ok=True)
 
     if CurriculumModelID > 0:

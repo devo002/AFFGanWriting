@@ -23,7 +23,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from loss_tro import crit, log_softmax
 from loss_tro import LabelSmoothing, log_softmax
 from load_data import vocab_size, tokens, num_tokens
-crit_teacher = LabelSmoothing(vocab_size, tokens['PAD_TOKEN'], smoothing=0.1)
+crit_teacher = LabelSmoothing(vocab_size, tokens['PAD_TOKEN'], smoothing=0.05)
 
 # NEW: TrOCR teacher + helpers
 from trocr_teacher import TrocrTeacher
@@ -315,7 +315,7 @@ class EarlyStopping:
 # ---------------- Main loop ----------------
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
-    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights1'
+    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights'
     os.makedirs(folder_weights, exist_ok=True)
 
     if CurriculumModelID > 0:
@@ -335,8 +335,8 @@ def main(train_loader, test_loader, num_writers):
         patience=EARLY_STOP_EPOCH if EARLY_STOP_EPOCH else 20, verbose=True
     )
 
-    for epoch in range(CurriculumModelID, 60001):
-        if epoch > 6000:
+    for epoch in range(CurriculumModelID, 70001):
+        if epoch > 7000:
             global MODEL_SAVE_EPOCH
             MODEL_SAVE_EPOCH = 20
 

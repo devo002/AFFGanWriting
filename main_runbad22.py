@@ -1,4 +1,4 @@
-# main_runnew.py  — FULL UPDATED FILE
+# main_runnew.py  — FULL UPDATED FILE (teacher-only eval after 800)
 
 import os, re
 import glob
@@ -6,6 +6,7 @@ import time
 import argparse
 import cv2
 import logging
+import random
 from datetime import datetime
 from modules_tro import normalize
 import numpy as np
@@ -64,14 +65,10 @@ def save_teacher_samples(
     os.makedirs(out_dir, exist_ok=True)
     n = min(xg.size(0), len(trocr_texts), len(target_texts), max_n)
     for i in range(n):
-        # to numpy [H,W], still in [-1,1]
         arr = xg[i, 0].detach().cpu().numpy()
-
-        # scale to 0..255 similarly to writertest
-        arr = normalize(arr)  # returns 0..255 as in writertest
+        arr = normalize(arr)  # 0..255
         if invert:
             arr = 255 - arr
-
         arr = np.clip(arr, 0, 255).astype('uint8')
 
         tgt = _san(target_texts[i])
@@ -79,15 +76,11 @@ def save_teacher_samples(
         fname = f"ep{epoch:04d}_st{step:04d}_{i:02d}__tgt_{tgt}__pred_{pred}.png"
         cv2.imwrite(os.path.join(out_dir, fname), arr)
 
-
-from load_data import index2letter
 ALPHABET = set(index2letter)
 
 def clean_for_vocab(s: str) -> str:
-    # keep only chars your recognizer knows (letters A–Z/a–z)
+    # keep only chars your recognizer knows
     return "".join(ch for ch in s if ch in ALPHABET)
-
-
 
 # ---------------- Args ----------------
 parser = argparse.ArgumentParser(
@@ -119,10 +112,9 @@ CurriculumModelID = args.start_epoch
 model_name = 'aaa'
 run_id = datetime.strftime(datetime.now(), '%m-%d-%H-%M')
 base_logdir = '/home/woody/iwi5/iwi5333h'
-logdir = os.path.join(base_logdir, 'log1', model_name + '-' + str(run_id))
+logdir = os.path.join(base_logdir, 'log', model_name + '-' + str(run_id))
 os.makedirs(logdir, exist_ok=True)
 writer = SummaryWriter(logdir)
-
 
 def log(msg):
     logger = logging.getLogger("GanWriting")
@@ -138,7 +130,6 @@ def log(msg):
     logger.info(msg)
     logger.removeHandler(handler)
     logger.removeHandler(console)
-
 
 # ---------------- Data ----------------
 def sort_batch(batch):
@@ -171,19 +162,25 @@ def sort_batch(batch):
         torch.tensor(np.array(label_xts_swap), dtype=torch.int64),
     )
 
-
 def all_data_loader():
     data_train, data_test = load_data_func(OOV)
     train_loader = torch.utils.data.DataLoader(
-        data_train, collate_fn=sort_batch, batch_size=BATCH_SIZE,
-        shuffle=True, num_workers=NUM_THREAD, pin_memory=True
+        data_train,
+        collate_fn=sort_batch,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=NUM_THREAD,
+        pin_memory=True
     )
     test_loader = torch.utils.data.DataLoader(
-        data_test, collate_fn=sort_batch, batch_size=BATCH_SIZE,
-        shuffle=False, num_workers=NUM_THREAD, pin_memory=True
+        data_test,
+        collate_fn=sort_batch,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_THREAD,
+        pin_memory=True
     )
     return train_loader, test_loader
-
 
 # ---------------- Train / Eval ----------------
 def train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch):
@@ -247,7 +244,6 @@ def train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch):
 
     return res_cer_te + res_cer_te2
 
-
 def test(test_loader, epoch, modelFile_o_model):
     if isinstance(modelFile_o_model, str):
         model = ConTranModel(NUM_WRITERS, show_iter_num, OOV).to(gpu)
@@ -281,7 +277,6 @@ def test(test_loader, epoch, modelFile_o_model):
 
     return test_cer
 
-
 # ---------------- Early Stopping ----------------
 class EarlyStopping:
     def __init__(self, patience=5, delta=0, verbose=False):
@@ -314,7 +309,6 @@ class EarlyStopping:
             print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).')
         self.val_loss_min = val_loss
 
-
 # ---------------- Main loop ----------------
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
@@ -338,8 +332,8 @@ def main(train_loader, test_loader, num_writers):
         patience=EARLY_STOP_EPOCH if EARLY_STOP_EPOCH else 20, verbose=True
     )
 
-    for epoch in range(CurriculumModelID, 50001):
-        if epoch > 4000:
+    for epoch in range(CurriculumModelID, 60001):
+        if epoch > 6000:
             global MODEL_SAVE_EPOCH
             MODEL_SAVE_EPOCH = 20
 
@@ -349,23 +343,19 @@ def main(train_loader, test_loader, num_writers):
         # Standard training
         _ = train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch)
 
+        # ----------------- EVAL & TEACHER FLOW -----------------
         if epoch % EVAL_EPOCH == 0:
-            # NEW: Save recognizer state before teacher phase
-            rec_state_dict = copy.deepcopy(model.rec.state_dict())
-
-            # 1) Validation BEFORE teacher phase
-            test_cer_no_teacher = test(test_loader, epoch, model)
-            writer.add_scalars("EVAL_NO_TEACHER", {
-                "res_cer_te": test_cer_no_teacher,  # Only log CER for simplicity; add others if needed
-            }, epoch)
-            log(f"[EVAL_NO_TEACHER @epoch {epoch}] cer={test_cer_no_teacher:.2f}")
-
-            # Restore recognizer state (optional, ensures teacher phase starts clean)
-            model.rec.load_state_dict(rec_state_dict)
-
-            if epoch >= 800:
-                # 2) Teacher phase (your original or my improved version)
+            if epoch < 800:
+                # BEFORE 800: single, normal evaluation
+                test_cer = test(test_loader, epoch, model)
+                writer.add_scalars("EVAL_NO_TEACHER_PHASE", {"res_cer_te_total": test_cer}, epoch)
+                log(f"[EVAL @epoch {epoch}] cer={test_cer:.2f}")
+                early_stopping(test_cer)
+                sched_rec.step(test_cer)
+            else:
+                # AFTER 800: run ONLY teacher–student guidance, then ONE evaluation
                 model.train()
+                # freeze everything except recognizer
                 for p in model.gen.parameters(): p.requires_grad = False
                 for p in model.dis.parameters(): p.requires_grad = False
                 for p in model.cla.parameters(): p.requires_grad = False
@@ -388,13 +378,9 @@ def main(train_loader, test_loader, num_writers):
                 for batch in test_loader:
                     if steps >= max_steps:
                         break
-                    # target_words = [
-                    #     "enigma", "egghead", "gripped", "Tuesday", "possess",
-                    #     "returns", "critics", "Privy", "massive", "blonde", "accents"
-                    # ]
+
                     k = len(target_words)
                     words_k = target_words[:]
-                    #log(f"[Teacher Step] target words: {words_k}")
 
                     style_imgs = batch[3].to(gpu)
                     if style_imgs.size(0) < k:
@@ -413,7 +399,6 @@ def main(train_loader, test_loader, num_writers):
                     texts, conf, xg_01_used = trocr_predict_best_polarity(trocr_teacher, xg)
                     mask = conf >= conf_threshold
                     n_used = int(mask.sum().item())
-                    #log(f"[Teacher Step] conf mean={conf.mean().item():.3f}, kept={n_used}/{len(conf)} @thr={conf_threshold:.2f}")
                     if n_used < 1:
                         skipped_small += 1
                         continue
@@ -423,23 +408,14 @@ def main(train_loader, test_loader, num_writers):
                     labels = texts_to_labels(texts_clean)
 
                     xg_sel = xg[mask]
-                    #rec_logits = recognition_logits(model, xg_sel, labels["ids"], labels["img_width"])
-                    #loss_rec_pseudo = recognition_loss(rec_logits, labels)
                     rec_logits = recognition_logits(model, xg_sel, labels["ids"], labels["img_width"])
-                    
-                    #logits_logprob = log_softmax(rec_logits)   # required by LabelSmoothing
-                    #target_ids = labels["ids"][:, 1:]
-                    #loss_rec_pseudo = crit(
-                    #    logits_logprob.view(-1, vocab_size),
-                    #    target_ids.contiguous().view(-1)
-                    #    )
-                    
+
                     logits_logprob = log_softmax(rec_logits)            # [B, T_logit, V]
                     B, T_logit, V = rec_logits.shape
 
                     # 1) drop <GO> from targets
                     target_ids = labels["ids"]
-                    if target_ids.size(1) > 1:                          # [B, T_label]
+                    if target_ids.size(1) > 1:
                         target_ids = target_ids[:, 1:]
 
                     # 2) align target length to logits length (pad/truncate with PAD)
@@ -452,44 +428,20 @@ def main(train_loader, test_loader, num_writers):
                             PAD, dtype=torch.long, device=target_ids.device
                         )
                         target_ids = torch.cat([target_ids, pad], dim=1)
-                    
-                    ids = labels["ids"].view(-1)
-                    assert 0 <= tokens['PAD_TOKEN'] < vocab_size, "PAD out of range"
-                    # print(
-                    #     "vocab_size:", vocab_size,
-                    #     "num_tokens:", num_tokens,
-                    #     "max_id:", int(ids.max().item()),
-                    #     "min_id:", int(ids.min().item()),
-                    # )
-                    bad = ids[(ids < 0) | (ids >= vocab_size)]
-                    if bad.numel():
-                        unique, counts = bad.unique(return_counts=True)
-                        print("Out-of-range ids (id:count):", list(zip(unique.tolist(), counts.tolist())))
-                    
-                    
-                    
-                    # 3) compute loss
+
+                    # 3) compute label-smoothed loss against pseudo targets
                     loss_rec_pseudo = crit_teacher(
                         logits_logprob.reshape(-1, vocab_size),
                         target_ids.contiguous().reshape(-1)
                     )
-                    
-
-                # --- DEBUG: check IDs are inside vocab range ---
-                    # --- END DEBUG ---
-
-
 
                     mean_conf = float(conf[mask].mean().item())
                     w = float(max(0.8, min(1.0, mean_conf)))
                     loss = w * loss_rec_pseudo
 
-                    # NEW: Log loss and gradient norm for diagnostics
-                    #print(f"[Teacher Step] loss={loss.item():.4f}")
                     rec_guidance_opt.zero_grad(set_to_none=True)
                     loss.backward()
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model.rec.parameters(), grad_clip)
-                    #print(f"[Teacher Step] grad_norm={grad_norm:.4f}")
+                    torch.nn.utils.clip_grad_norm_(model.rec.parameters(), grad_clip)
                     rec_guidance_opt.step()
 
                     used_batches += 1
@@ -498,17 +450,14 @@ def main(train_loader, test_loader, num_writers):
                     conf_sum += mean_conf
                     steps += 1
 
+                # unfreeze for normal training again
                 model.gen.train()
                 for p in model.gen.parameters(): p.requires_grad = True
                 for p in model.dis.parameters(): p.requires_grad = True
                 for p in model.cla.parameters(): p.requires_grad = True
 
-                if used_batches > 0:
-                    teacher_avg_loss = loss_sum / used_batches
-                    teacher_avg_conf = conf_sum / used_batches
-                else:
-                    teacher_avg_loss = 0.0
-                    teacher_avg_conf = 0.0
+                teacher_avg_loss = (loss_sum / used_batches) if used_batches > 0 else 0.0
+                teacher_avg_conf = (conf_sum / used_batches) if used_batches > 0 else 0.0
 
                 writer.add_scalars("teacher_phase", {
                     "avg_pseudo_loss": teacher_avg_loss,
@@ -522,27 +471,24 @@ def main(train_loader, test_loader, num_writers):
                     f"avg_conf={teacher_avg_conf:.3f}, avg_pseudo_loss={teacher_avg_loss:.4f}, "
                     f"skipped_small_batches={skipped_small}")
 
-            # 3) Validation AFTER teacher phase
-            test_cer_with_teacher = test(test_loader, epoch, model)
-            writer.add_scalars("EVAL_WITH_TEACHER", {
-                "res_cer_te": test_cer_with_teacher,
-            }, epoch)
-            log(f"[EVAL_WITH_TEACHER @epoch {epoch}] cer={test_cer_with_teacher:.2f}")
+                # SINGLE evaluation after teacher phase (no pre-teacher eval)
+                test_cer = test(test_loader, epoch, model)
+                writer.add_scalars("EVAL_WITH_TEACHER_ONLY", {"res_cer_te": test_cer}, epoch)
+                log(f"[EVAL_WITH_TEACHER_ONLY @epoch {epoch}] cer={test_cer:.2f}")
 
-            # Use the better CER for early stopping (or just no-teacher for consistency)
-            test_cer = min(test_cer_no_teacher, test_cer_with_teacher)
-            early_stopping(test_cer)
-            sched_rec.step(test_cer)
-            if early_stopping.early_stop:
-                print(f"Early stopping triggered at epoch {epoch}")
-                model_path = os.path.join(folder_weights, f'contran-best.model')
-                torch.save(model.state_dict(), model_path)
-                break
+                early_stopping(test_cer)
+                sched_rec.step(test_cer)
 
-            if epoch % MODEL_SAVE_EPOCH == 0:
-                model_path = os.path.join(folder_weights, f'contran-{epoch}.model')
-                torch.save(model.state_dict(), model_path)
-                
+        # -------------- Saving ----------------
+        if early_stopping.early_stop:
+            print(f"Early stopping triggered at epoch {epoch}")
+            model_path = os.path.join(folder_weights, f'contran-best.model')
+            torch.save(model.state_dict(), model_path)
+            break
+
+        if epoch % MODEL_SAVE_EPOCH == 0:
+            model_path = os.path.join(folder_weights, f'contran-{epoch}.model')
+            torch.save(model.state_dict(), model_path)
 
 # ---------- Optuna helpers (unchanged core logic) ----------
 def train_with_custom_lr(train_loader, test_loader, num_writers, lr_dis, lr_gen, lr_rec, lr_cla):
@@ -562,7 +508,6 @@ def train_with_custom_lr(train_loader, test_loader, num_writers, lr_dis, lr_gen,
     final_cer = test(test_loader, 160, model)
     return final_cer
 
-
 def optuna_objective(trial):
     lr_gen = trial.suggest_loguniform("lr_gen", 1e-5, 1e-3)
     lr_rec = trial.suggest_loguniform("lr_rec", 1e-6, 1e-4)
@@ -572,14 +517,12 @@ def optuna_objective(trial):
     final_cer = train_with_custom_lr(train_loader, test_loader, NUM_WRITERS, lr_dis, lr_gen, lr_rec, lr_cla)
     return final_cer
 
-
 def rm_old_model(index, folder_weights):
     models = glob.glob(os.path.join(folder_weights, '*.model'))
     for m in models:
         epoch = int(m.split('-')[-1].split('.')[0])
         if epoch < index:
             os.remove(m)
-
 
 if __name__ == '__main__':
     print(time.ctime())
