@@ -17,15 +17,16 @@ from recognizer.models.attention import locationAttention as rec_attention
 from load_data import OUTPUT_MAX_LEN, IMG_HEIGHT, IMG_WIDTH, vocab_size, index2letter, num_tokens, tokens
 import cv2
 #from torchvision.models import efficientnet_v2_s
-#from torchvision.models import efficientnet_v2_l
+from torchvision.models import efficientnet_v2_l
 import torch.nn.functional as F
-#from torchvision.models import resnet50, resnet18, convnext_tiny 
+from torchvision.models import resnet50, resnet18, convnext_tiny 
 from torchvision.models.feature_extraction import create_feature_extractor
 #from torchvision.models.vision_transformer import vit_b_16, ViT_B_16_Weights
 from trocr_recognizer import TrOCRRecModel
 from inception import ImageEncoderInceptionV3
 from dinomodel import ImageEncoderDINOv2
 from inceptionrecognizer import EncoderInception
+from cnn import ImageEncoderStyleCNN
 #from recognizer.models.encoder_vgg import EfficientNetB7Encoder
 
 
@@ -44,7 +45,7 @@ def fine(label_list):
         return label_list
 
 def write_image(xg, pred_label, gt_img, gt_label, tr_imgs, xg_swap, pred_label_swap, gt_label_swap, title, num_tr=2):
-    folder = '/home/woody/iwi5/iwi5333h/img'
+    folder = '/home/woody/iwi5/iwi5333h/img3'
     if not os.path.exists(folder):
         os.makedirs(folder)
     batch_size = gt_label.shape[0]
@@ -207,9 +208,10 @@ ckpt_path = "/home/woody/iwi5/iwi5333h/model/dinov2_vitl14_pretrain.pth"
 class GenModel_FC(nn.Module):
     def __init__(self, text_max_len):
         super(GenModel_FC, self).__init__()
-        self.enc_image = ImageEncoder().to(gpu)
+        #self.enc_image = ImageEncoder().to(gpu)
+        #self.enc_image = ImageEncoderStyleCNN(in_channels=50, final_size=(8,27)).to(gpu)
         #self.enc_image = ImageEncoderInceptionV3(weight_path=inception_weights).to(gpu)
-        #self.enc_image = ImageEncoderDINOv2(repo_dir=repo_dir,arch="vitl14",ckpt_path=ckpt_path,in_channels=50,final_size=(8, 27),tap_blocks=[4, 8, 16, 23]).to(gpu)
+        self.enc_image = ImageEncoderDINOv2(repo_dir=repo_dir,arch="vitl14",ckpt_path=ckpt_path,in_channels=50,final_size=(8, 27),tap_blocks=[4, 8, 16, 23]).to(gpu)
         #self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
         #self.enc_image = ResNet18().to(gpu)
         #self.enc_image = ResNet18(nb_feat=384, in_channels=50).to(gpu)

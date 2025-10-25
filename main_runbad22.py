@@ -1,29 +1,38 @@
-# main_runnew.py  — FULL UPDATED FILE (teacher-only eval after 800)
+# main_runnew.py — FULL UPDATED FILE
+# (teacher-only eval after 800, FOLDER-BASED TrOCR GUIDANCE, best-of-two CER)
 
-import os, re
+# ---- silence HF/Tokenizers BEFORE any transformers/tokenizers imports ----
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"    # silence tokenizers fork warning
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"    # reduce transformers logs
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"      # no telemetry notices
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"  # no progress bars from HF Hub
+# --------------------------------------------------------------------------
+
+import re
 import glob
 import time
 import argparse
 import cv2
 import logging
-import random
 from datetime import datetime
-from modules_tro import normalize
+
 import numpy as np
 import torch
 from torch import optim
 import torch.backends.cudnn as cudnn
-import optuna
-from load_data import index2letter
-from load_data import NUM_WRITERS
-from load_data import loadData as load_data_func
-from network_tro import ConTranModel
-from loss_tro import CER
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from loss_tro import crit, log_softmax
-from loss_tro import LabelSmoothing, log_softmax
+
+import optuna
+from PIL import Image
+
+from modules_tro import normalize
+from load_data import index2letter, NUM_WRITERS
+from load_data import loadData as load_data_func
 from load_data import vocab_size, tokens, num_tokens
-crit_teacher = LabelSmoothing(vocab_size, tokens['PAD_TOKEN'], smoothing=0.1)
+
+from network_tro import ConTranModel
+from loss_tro import CER, crit, log_softmax, LabelSmoothing
 
 # NEW: TrOCR teacher + helpers
 from trocr_teacher import TrocrTeacher
@@ -38,16 +47,24 @@ from helpers import (
     TARGET_WORDS
 )
 
+# optional: clamp transformers logger in code too
+try:
+    from transformers.utils import logging as hf_logging
+    hf_logging.set_verbosity_error()
+except Exception:
+    pass
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 except ModuleNotFoundError:
     from tensorboardX import SummaryWriter
 
-from PIL import Image
-import re
-import copy
+# ------------- CONFIG: FOLDER WITH IMAGES FOR TrOCR TEACHER GUIDANCE -------------
+FOLDER_WITH_IMAGES = "/home/woody/iwi5/iwi5333h/trocrimages"
 
+# --------- misc helpers ----------
 target_words = TARGET_WORDS
+crit_teacher = LabelSmoothing(vocab_size, tokens['PAD_TOKEN'], smoothing=0.1)
 
 def _san(s):  # simple filename sanitizer
     return re.sub(r'[^a-zA-Z0-9_\-]+', '_', s)[:60]
@@ -57,10 +74,6 @@ def save_teacher_samples(
 ):
     """
     xg: [B,1,H,W] in [-1,1] (generator output)
-    trocr_texts: list[str]  (TroCR predictions)
-    target_texts: list[str] (your prompts)
-    Saves PNGs using the same visual convention as writertest:
-      normalize() -> (optional) invert -> uint8 -> cv2.imwrite
     """
     os.makedirs(out_dir, exist_ok=True)
     n = min(xg.size(0), len(trocr_texts), len(target_texts), max_n)
@@ -112,7 +125,7 @@ CurriculumModelID = args.start_epoch
 model_name = 'aaa'
 run_id = datetime.strftime(datetime.now(), '%m-%d-%H-%M')
 base_logdir = '/home/woody/iwi5/iwi5333h'
-logdir = os.path.join(base_logdir, 'log', model_name + '-' + str(run_id))
+logdir = os.path.join(base_logdir, 'log3', model_name + '-' + str(run_id))
 os.makedirs(logdir, exist_ok=True)
 writer = SummaryWriter(logdir)
 
@@ -181,6 +194,140 @@ def all_data_loader():
         pin_memory=True
     )
     return train_loader, test_loader
+
+# ---------------- NEW: Folder-based teacher guidance helpers ----------------
+@torch.no_grad()
+def _read_gray_01(path):
+    """Read image as grayscale float32 in [0,1], shape [H, W]."""
+    im = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+    if im is None:
+        raise RuntimeError(f"Failed to read {path}")
+    return (im.astype(np.float32) / 255.0)
+
+def _to_batch_tensor_minus1_1(imgs_01, device):
+    """
+    imgs_01: list of [H,W] float32 in [0,1]
+    returns xg: [B,1,H,W] float32 in [-1,1]
+    """
+    arr = [(im * 2.0 - 1.0)[None, ...] for im in imgs_01]  # [1,H,W]
+    x = np.stack(arr, axis=0)                               # [B,1,H,W]
+    return torch.from_numpy(x).float().to(device)
+
+def teacher_rec_step_from_folder(
+    image_dir,
+    model,
+    trocr_teacher,
+    device,
+    conf_threshold=0.85,
+    max_steps=10,
+    batch_size=16,
+    grad_clip=1.0,
+):
+    """
+    Reads images from `image_dir`, runs TrOCR with polarity search,
+    keeps conf≥threshold, then updates the recognizer with label-smoothed loss.
+    """
+    # gather image paths
+    exts = ("*.png","*.jpg","*.jpeg","*.bmp","*.tif","*.tiff","*.gif")
+    paths = []
+    for e in exts:
+        paths.extend(glob.glob(os.path.join(image_dir, e)))
+    paths = sorted(paths)
+    if not paths:
+        return {"used_batches": 0, "used_samples": 0, "skipped_small_batches": 0,
+                "avg_conf": 0.0, "avg_pseudo_loss": 0.0}
+
+    # Optimizer for recognizer only (as in your teacher phase)
+    rec_guidance_opt = optim.Adam(
+        filter(lambda p: p.requires_grad, model.rec.parameters()),
+        lr=1e-5
+    )
+
+    steps = 0
+    used_batches = 0
+    used_samples = 0
+    skipped_small = 0
+    loss_sum = 0.0
+    conf_sum = 0.0
+
+    for s in range(0, len(paths), batch_size):
+        if steps >= max_steps: break
+        chunk = paths[s:s+batch_size]
+
+        # read -> [0,1] grayscale -> [-1,1] tensor [B,1,H,W]
+        imgs_01 = []
+        for p in chunk:
+            try:
+                imgs_01.append(_read_gray_01(p))
+            except Exception as e:
+                print(f"[WARN] {p}: {e}")
+        if not imgs_01:
+            continue
+        xg = _to_batch_tensor_minus1_1(imgs_01, device)  # [-1,1]
+
+        # TrOCR + polarity search (uses your existing helper)
+        texts, conf, _ = trocr_predict_best_polarity(trocr_teacher, xg)
+
+        mask = conf >= conf_threshold
+        n_used = int(mask.sum().item())
+        if n_used < 1:
+            skipped_small += 1
+            continue
+
+        texts_raw = [texts[i] for i in range(len(texts)) if mask[i]]
+        texts_clean = [clean_for_vocab(t) for t in texts_raw]
+        labels = texts_to_labels(texts_clean)
+
+        # Select masked images for recognizer update
+        xg_sel = xg[mask]  # still [-1,1]
+        rec_logits = recognition_logits(model, xg_sel, labels["ids"], labels["img_width"])  # [B,T,V]
+        logits_logprob = log_softmax(rec_logits)
+        B, T_logit, V = rec_logits.shape
+
+        # 1) drop <GO>
+        target_ids = labels["ids"]
+        if target_ids.size(1) > 1:
+            target_ids = target_ids[:, 1:]
+
+        # 2) match target length to logits length
+        PAD = tokens['PAD_TOKEN']
+        if target_ids.size(1) > T_logit:
+            target_ids = target_ids[:, :T_logit]
+        elif target_ids.size(1) < T_logit:
+            pad = torch.full((B, T_logit - target_ids.size(1)), PAD,
+                             dtype=torch.long, device=target_ids.device)
+            target_ids = torch.cat([target_ids, pad], dim=1)
+
+        # 3) label-smoothed loss vs pseudo labels from TrOCR
+        loss_rec_pseudo = crit_teacher(
+            logits_logprob.reshape(-1, vocab_size),
+            target_ids.contiguous().reshape(-1)
+        )
+
+        mean_conf = float(conf[mask].mean().item())
+        w = float(max(0.8, min(1.0, mean_conf)))  # same weighting scheme
+        loss = w * loss_rec_pseudo
+
+        rec_guidance_opt.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.rec.parameters(), grad_clip)
+        rec_guidance_opt.step()
+
+        used_batches += 1
+        used_samples += n_used
+        loss_sum += float(loss.item())
+        conf_sum += mean_conf
+        steps += 1
+
+    avg_loss = (loss_sum / used_batches) if used_batches > 0 else 0.0
+    avg_conf = (conf_sum / used_batches) if used_batches > 0 else 0.0
+    return {
+        "used_batches": used_batches,
+        "used_samples": used_samples,
+        "skipped_small_batches": skipped_small,
+        "avg_conf": avg_conf,
+        "avg_pseudo_loss": avg_loss
+    }
 
 # ---------------- Train / Eval ----------------
 def train(train_loader, model, dis_opt, gen_opt, rec_opt, cla_opt, epoch):
@@ -312,7 +459,7 @@ class EarlyStopping:
 # ---------------- Main loop ----------------
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
-    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights'
+    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights3'
     os.makedirs(folder_weights, exist_ok=True)
 
     if CurriculumModelID > 0:
@@ -345,110 +492,34 @@ def main(train_loader, test_loader, num_writers):
 
         # ----------------- EVAL & TEACHER FLOW -----------------
         if epoch % EVAL_EPOCH == 0:
+            # 1) Always evaluate WITHOUT teacher first
+            test_cer_no_teacher = test(test_loader, epoch, model)
+            writer.add_scalars("EVAL_NO_TEACHER", {"res_cer_te": test_cer_no_teacher}, epoch)
+            log(f"[EVAL_NO_TEACHER @epoch {epoch}] cer={test_cer_no_teacher:.2f}")
+
             if epoch < 800:
-                # BEFORE 800: single, normal evaluation
-                test_cer = test(test_loader, epoch, model)
-                writer.add_scalars("EVAL_NO_TEACHER_PHASE", {"res_cer_te_total": test_cer}, epoch)
-                log(f"[EVAL @epoch {epoch}] cer={test_cer:.2f}")
-                early_stopping(test_cer)
-                sched_rec.step(test_cer)
+                # Before 800 → no teacher phase
+                early_stopping(test_cer_no_teacher)
+                sched_rec.step(test_cer_no_teacher)
             else:
-                # AFTER 800: run ONLY teacher–student guidance, then ONE evaluation
+                # 2) TEACHER PHASE (recognizer-only updates, using folder images)
                 model.train()
-                # freeze everything except recognizer
                 for p in model.gen.parameters(): p.requires_grad = False
                 for p in model.dis.parameters(): p.requires_grad = False
                 for p in model.cla.parameters(): p.requires_grad = False
                 for p in model.rec.parameters(): p.requires_grad = True
                 model.gen.eval()
 
-                rec_guidance_opt = optim.Adam(
-                    filter(lambda p: p.requires_grad, model.rec.parameters()),
-                    lr=1e-6
+                stats = teacher_rec_step_from_folder(
+                    image_dir=FOLDER_WITH_IMAGES,
+                    model=model,
+                    trocr_teacher=trocr_teacher,
+                    device=gpu,
+                    conf_threshold=0.85,
+                    max_steps=10,
+                    batch_size=16,
+                    grad_clip=1.0,
                 )
-                steps, max_steps = 0, 10
-                conf_threshold = 0.8
-                grad_clip = 1.0
-                used_batches = 0
-                used_samples = 0
-                skipped_small = 0
-                loss_sum = 0.0
-                conf_sum = 0.0
-
-                for batch in test_loader:
-                    if steps >= max_steps:
-                        break
-
-                    k = len(target_words)
-                    words_k = target_words[:]
-
-                    style_imgs = batch[3].to(gpu)
-                    if style_imgs.size(0) < k:
-                        reps = (k + style_imgs.size(0) - 1) // style_imgs.size(0)
-                        style_imgs = style_imgs.repeat(reps, 1, 1, 1)
-                    style_imgs = style_imgs[:k]
-
-                    with torch.no_grad():
-                        xg, words_used, label_ids_wt, img_widths_wt = generate_from_words_like_writertest(
-                            model, style_imgs, words_k, use_rec_filter=True, max_edit=100
-                        )
-                    if xg is None:
-                        skipped_small += 1
-                        continue
-
-                    texts, conf, xg_01_used = trocr_predict_best_polarity(trocr_teacher, xg)
-                    mask = conf >= conf_threshold
-                    n_used = int(mask.sum().item())
-                    if n_used < 1:
-                        skipped_small += 1
-                        continue
-
-                    texts_raw = [texts[i] for i in range(len(texts)) if mask[i]]
-                    texts_clean = [clean_for_vocab(t) for t in texts_raw]
-                    labels = texts_to_labels(texts_clean)
-
-                    xg_sel = xg[mask]
-                    rec_logits = recognition_logits(model, xg_sel, labels["ids"], labels["img_width"])
-
-                    logits_logprob = log_softmax(rec_logits)            # [B, T_logit, V]
-                    B, T_logit, V = rec_logits.shape
-
-                    # 1) drop <GO> from targets
-                    target_ids = labels["ids"]
-                    if target_ids.size(1) > 1:
-                        target_ids = target_ids[:, 1:]
-
-                    # 2) align target length to logits length (pad/truncate with PAD)
-                    PAD = tokens['PAD_TOKEN']
-                    if target_ids.size(1) > T_logit:
-                        target_ids = target_ids[:, :T_logit]
-                    elif target_ids.size(1) < T_logit:
-                        pad = torch.full(
-                            (B, T_logit - target_ids.size(1)),
-                            PAD, dtype=torch.long, device=target_ids.device
-                        )
-                        target_ids = torch.cat([target_ids, pad], dim=1)
-
-                    # 3) compute label-smoothed loss against pseudo targets
-                    loss_rec_pseudo = crit_teacher(
-                        logits_logprob.reshape(-1, vocab_size),
-                        target_ids.contiguous().reshape(-1)
-                    )
-
-                    mean_conf = float(conf[mask].mean().item())
-                    w = float(max(0.8, min(1.0, mean_conf)))
-                    loss = w * loss_rec_pseudo
-
-                    rec_guidance_opt.zero_grad(set_to_none=True)
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.rec.parameters(), grad_clip)
-                    rec_guidance_opt.step()
-
-                    used_batches += 1
-                    used_samples += n_used
-                    loss_sum += float(loss.item())
-                    conf_sum += mean_conf
-                    steps += 1
 
                 # unfreeze for normal training again
                 model.gen.train()
@@ -456,28 +527,35 @@ def main(train_loader, test_loader, num_writers):
                 for p in model.dis.parameters(): p.requires_grad = True
                 for p in model.cla.parameters(): p.requires_grad = True
 
-                teacher_avg_loss = (loss_sum / used_batches) if used_batches > 0 else 0.0
-                teacher_avg_conf = (conf_sum / used_batches) if used_batches > 0 else 0.0
-
-                writer.add_scalars("teacher_phase", {
-                    "avg_pseudo_loss": teacher_avg_loss,
-                    "avg_confidence": teacher_avg_conf,
-                    "used_batches": used_batches,
-                    "used_samples": used_samples,
-                    "skipped_small_batches": skipped_small
+                writer.add_scalars("teacher_phase_folder", {
+                    "avg_pseudo_loss": stats["avg_pseudo_loss"],
+                    "avg_confidence": stats["avg_conf"],
+                    "used_batches": stats["used_batches"],
+                    "used_samples": stats["used_samples"],
+                    "skipped_small_batches": stats["skipped_small_batches"]
                 }, epoch)
-                log(f"[Teacher Phase @epoch {epoch}] "
-                    f"used_batches={used_batches}, used_samples={used_samples}, "
-                    f"avg_conf={teacher_avg_conf:.3f}, avg_pseudo_loss={teacher_avg_loss:.4f}, "
-                    f"skipped_small_batches={skipped_small}")
+                log(f"[Teacher Phase (folder) @epoch {epoch}] "
+                    f"used_batches={stats['used_batches']}, used_samples={stats['used_samples']}, "
+                    f"avg_conf={stats['avg_conf']:.3f}, avg_pseudo_loss={stats['avg_pseudo_loss']:.4f}, "
+                    f"skipped_small_batches={stats['skipped_small_batches']}")
 
-                # SINGLE evaluation after teacher phase (no pre-teacher eval)
-                test_cer = test(test_loader, epoch, model)
-                writer.add_scalars("EVAL_WITH_TEACHER_ONLY", {"res_cer_te": test_cer}, epoch)
-                log(f"[EVAL_WITH_TEACHER_ONLY @epoch {epoch}] cer={test_cer:.2f}")
+                # 3) Evaluate WITH teacher (after guidance)
+                test_cer_with_teacher = test(test_loader, epoch, model)
+                writer.add_scalars("EVAL_WITH_TEACHER", {"res_cer_te": test_cer_with_teacher}, epoch)
+                log(f"[EVAL_WITH_TEACHER @epoch {epoch}] cer={test_cer_with_teacher:.2f}")
 
-                early_stopping(test_cer)
-                sched_rec.step(test_cer)
+                # 4) Use the MIN CER for ES + LR schedule and log the choice
+                chosen_cer = min(test_cer_no_teacher, test_cer_with_teacher)
+                writer.add_scalars("EVAL_BEST_OF_TWO", {
+                    "no_teacher": test_cer_no_teacher,
+                    "with_teacher": test_cer_with_teacher,
+                    "chosen_min": chosen_cer
+                }, epoch)
+                log(f"[EVAL_CHOSEN_MIN @epoch {epoch}] minCER={chosen_cer:.2f} "
+                    f"(no_teacher={test_cer_no_teacher:.2f}, with_teacher={test_cer_with_teacher:.2f})")
+
+                early_stopping(chosen_cer)
+                sched_rec.step(chosen_cer)
 
         # -------------- Saving ----------------
         if early_stopping.early_stop:

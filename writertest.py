@@ -1,3 +1,4 @@
+
 import cv2
 import Levenshtein as Lev
 import random
@@ -17,10 +18,10 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 folder_wids = '/home/woody/iwi5/iwi5333h/data'
 # img_base = '/home/WeiHongxi/WangHeng/project/dataset/Iam_database/words/'
 img_base = '/home/woody/iwi5/iwi5333h/data'
-folder_pre = '/home/woody/iwi5/iwi5333h/checkwords/'
+folder_pre = '/home/woody/iwi5/iwi5333h/gan'
 # folder_pre = 'test_single_writer.4_scenarios_average/'
 #epoch = 5000
-epoch = 3600
+epoch = 2700
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument('--epoch', default=epoch, type=int,
@@ -190,8 +191,8 @@ if __name__ == '__main__':
         if i == 0:
             folder = folder_pre + model_epoch + '/res_4.oo_vocab_te_writer'
             target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
-            #text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/copy.57'
-            text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+            text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/copy.57'
+            #text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
 
         # elif i == 1:
         #     folder = folder_pre + model_epoch + '/res_1.in_vocab_tr_writer'
@@ -234,5 +235,5 @@ if __name__ == '__main__':
         # Iterate
         wids = tqdm(wids)
         for wid in wids:
-            model_path = f'/home/vault/iwi5/iwi5333h/transformer/contran-{model_epoch}.model'
+            model_path = f'/home/vault/iwi5/iwi5333h/VGG19/contran-{model_epoch}.model'
             test_writer(wid, model_path, folder, text_corpus, data_dict)

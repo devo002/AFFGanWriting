@@ -92,6 +92,73 @@ def trocr_predict_best_polarity(trocr_teacher, xg):
     t2, c2 = trocr_teacher.predict(1.0 - x01)
     return (t2, c2, 1.0 - x01) if c2.mean().item() > c1.mean().item() else (t1, c1, x01)
 
+# @torch.no_grad()
+# def trocr_predict_best_polarity(trocr_teacher, xg, num_beams: int = 1, max_length: int = 48):
+#     """
+#     Try normal and inverted polarity; return the better one by mean confidence.
+#     xg: [-1,1] from generator
+#     num_beams: beam search size (default 1 = greedy)
+#     max_length: maximum text length to decode
+#     """
+#     x01 = (xg + 1.0) / 2.0
+
+#     Run OCR on both normal and inverted images
+#     t1, c1 = trocr_teacher.predict(x01, num_beams=num_beams, max_length=max_length)
+#     t2, c2 = trocr_teacher.predict(1.0 - x01, num_beams=num_beams, max_length=max_length)
+
+#     Pick the polarity with higher mean confidence
+#     if c2.mean().item() > c1.mean().item():
+#         return (t2, c2, 1.0 - x01)
+#     else:
+#         return (t1, c1, x01)
+
+
+# @torch.no_grad()
+# def trocr_predict_best_polarity(
+#     teacher,
+#     xg: torch.Tensor,                 # [B,1,H,W] in [-1,1]
+#     num_beams: int = 1,
+#     max_length: int = 48,
+#     **gen_kwargs
+# ):
+#     """
+#     Runs TrOCR on normal and inverted polarity, picks per-sample higher-confidence.
+#     Returns:
+#       texts: list[str]
+#       conf:  torch.FloatTensor [B]
+#       xg_used: torch.Tensor [B,1,H,W] (the selected polarity per sample)
+#     """
+#     # Normal polarity
+#     texts_n, conf_n = teacher.predict(
+#         xg, num_beams=num_beams, max_length=max_length, **gen_kwargs
+#     )
+#     # Inverted polarity
+#     xg_inv = -xg
+#     texts_i, conf_i = teacher.predict(
+#         xg_inv, num_beams=num_beams, max_length=max_length, **gen_kwargs
+#     )
+
+#     conf_n = conf_n.detach().cpu()
+#     conf_i = conf_i.detach().cpu()
+#     use_inv = conf_i > conf_n
+
+#     texts = []
+#     conf  = []
+#     xg_used = []
+#     for i in range(xg.size(0)):
+#         if use_inv[i]:
+#             texts.append(texts_i[i])
+#             conf.append(conf_i[i])
+#             xg_used.append(xg_inv[i:i+1])
+#         else:
+#             texts.append(texts_n[i])
+#             conf.append(conf_n[i])
+#             xg_used.append(xg[i:i+1])
+
+#     conf = torch.stack(conf)
+#     xg_used = torch.cat(xg_used, dim=0)
+#     return texts, conf, xg_used
+
 
 @torch.no_grad()
 def generate_from_batch(model, train_data_list):
@@ -206,6 +273,14 @@ def recognition_loss(logits, labels):
 #]
 
 # # helpers.py
+
+TARGET_WORDS2 = [
+    "accents","fifty","gross","Tea","whom","renamed","Heaven","Harry","arrange","captain","why","Father","beaten","Bar","base","creamy","About","Allies","sound","farmers","anyone","steel","Mary","used","fever","looking","lately","returns","humans","finals","beyond","lots","waiting","cited","measure","posse","blow","blonde","twice","Having","compels","rooms","cocked","virtual","dying","tons","Travel","idea","gripped","Act","reign","moods","altered","sample","Soviet","thick","enigma","here","egghead","Public","Bryan","porous","estate","guilty","Caught","Lucas","observe","mouth","pricked","obscure","casual","take","home","amber","weekend","forming","aid","outlook","uniting","But","earnest","bear","news","sparked","merrily","extreme","North","damned","big","bosses","context","easily","took","hurried","Gene","due","deserve","cult","leisure","critics","parish","Music","charge","grey","Privy","Fred","massive","others","shirt","average","warning","Tuesday","locked","possess"
+
+
+]
+
+
 TARGET_WORDS = [
     "Members","of","the","Cabinet","are","basing","their","on","new",
     "booklet","called","The","Record","Speaks","which","in","some","detail",
@@ -214,12 +289,13 @@ TARGET_WORDS = [
     "their","stock","at","home","has","fallen","in","the","face","of","heavy",
     "and","an","economy","The","process","has","been","too","slow","for",
     "Herr","Strauss","and","last","month","he","Britain","for","being","an",
-    "for","West","plans","for"
+    "for","West","plans","for","warrior","Morning","poetic","nodding","certify","reviews","mosaics","senders","humming","bumped","redeem","Married","robbing","witches","visibly","arsenal","skiing","windy","receive","flower","voyager","noisy","moody","Isle"
+    ,"rackets","cloud","thunder","Glow","handle","grades","Clever","parties","friends", "quiz","quartz","xylophone","exit","zebra","pizza","jazz","fuzzy","oxygen","boxing","jigsaw","equal","vex","zipper"
 ]
 
 #TARGET_WORDS2 = [
-#    "warrior","Morning","poetic","nodding","certify","reviews","mosaics","senders","humming","bumped","redeem","robbing","Married","robbing","witches","visibly","arsenal","skiing","windy","recieve","flower","voyager","noisy","moody","Isle"
-#    ,"rackets","cloud","thunder","Glow","handle","grades","Clever","parties","friends"
+#    "warrior","Morning","poetic","nodding","certify","reviews","mosaics","senders","humming","bumped","redeem","Married","robbing","witches","visibly","arsenal","skiing","windy","receive","flower","voyager","noisy","moody","Isle"
+#    ,"rackets","cloud","thunder","Glow","handle","grades","Clever","parties","friends", "quiz","quartz","xylophone","exit","zebra","pizza","jazz","fuzzy","oxygen","boxing","jigsaw","equal","vex","zipper"
 #]
 #]
 #]

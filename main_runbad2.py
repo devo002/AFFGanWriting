@@ -23,7 +23,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from loss_tro import crit, log_softmax
 from loss_tro import LabelSmoothing, log_softmax
 from load_data import vocab_size, tokens, num_tokens
-crit_teacher = LabelSmoothing(vocab_size, tokens['PAD_TOKEN'], smoothing=0.05)
+crit_teacher = LabelSmoothing(vocab_size, tokens['PAD_TOKEN'], smoothing=0.09)
 
 # NEW: TrOCR teacher + helpers
 from trocr_teacher import TrocrTeacher
@@ -315,7 +315,7 @@ class EarlyStopping:
 # ---------------- Main loop ----------------
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
-    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights'
+    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights2'
     os.makedirs(folder_weights, exist_ok=True)
 
     if CurriculumModelID > 0:
