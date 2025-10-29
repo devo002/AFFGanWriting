@@ -377,160 +377,160 @@ class ImageEncoder(nn.Module):
     
     
 #efficientnet_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_s-dd5fe13b.pth"
-# efficientnet_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_l-59c71312.pth"
+efficientnet_weights_path = "/home/woody/iwi5/iwi5333h/model/efficientnet_v2_l-59c71312.pth"
 
 
-# class ImageEncoderEfficientNet(nn.Module):
-#     def __init__(self, weight_path=None, in_channels=50):
-#         super(ImageEncoderEfficientNet, self).__init__()
-#         self.output_dim = 512
-#         self.model = efficientnet_v2_l(weights=None)
+class ImageEncoderEfficientNet(nn.Module):
+    def __init__(self, weight_path=None, in_channels=50):
+        super(ImageEncoderEfficientNet, self).__init__()
+        self.output_dim = 512
+        self.model = efficientnet_v2_l(weights=None)
 
-#         # Load pretrained weights if provided
-#         if weight_path:
-#             state_dict = torch.load(weight_path, map_location="cpu")
-#             self.model.load_state_dict(state_dict)
+        # Load pretrained weights if provided
+        if weight_path:
+            state_dict = torch.load(weight_path, map_location="cpu")
+            self.model.load_state_dict(state_dict)
 
-#         # Modify the first conv layer to accept `in_channels` instead of 3
-#         first_conv = self.model.features[0][0]  # Assuming [Conv2d, BN, SiLU]
-#         new_conv = nn.Conv2d(
-#             in_channels=in_channels,
-#             out_channels=first_conv.out_channels,
-#             kernel_size=first_conv.kernel_size,
-#             stride=first_conv.stride,
-#             padding=first_conv.padding,
-#             bias=first_conv.bias is not None
-#         )
+        # Modify the first conv layer to accept `in_channels` instead of 3
+        first_conv = self.model.features[0][0]  # Assuming [Conv2d, BN, SiLU]
+        new_conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=first_conv.out_channels,
+            kernel_size=first_conv.kernel_size,
+            stride=first_conv.stride,
+            padding=first_conv.padding,
+            bias=first_conv.bias is not None
+        )
 
-#         # Initialize weights smartly from original conv
-#         with torch.no_grad():
-#             if first_conv.weight.shape[1] == 3:
-#                 # Copy first 3 channels
-#                 new_conv.weight[:, :3] = first_conv.weight
-#                 # Initialize remaining channels by repeating channel 0 or average
-#                 if in_channels > 3:
-#                     repeat_tensor = first_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
-#                     new_conv.weight[:, 3:] = repeat_tensor
+        # Initialize weights smartly from original conv
+        with torch.no_grad():
+            if first_conv.weight.shape[1] == 3:
+                # Copy first 3 channels
+                new_conv.weight[:, :3] = first_conv.weight
+                # Initialize remaining channels by repeating channel 0 or average
+                if in_channels > 3:
+                    repeat_tensor = first_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
+                    new_conv.weight[:, 3:] = repeat_tensor
 
-#         self.model.features[0][0] = new_conv
+        self.model.features[0][0] = new_conv
 
-#         self.features = list(self.model.features.children())
+        self.features = list(self.model.features.children())
         
-#         # for i, block in enumerate(self.model.features):
-#         #     if i < 2:
-#         #         for param in block.parameters():
-#         #             param.requires_grad = False
+        # for i, block in enumerate(self.model.features):
+        #     if i < 2:
+        #         for param in block.parameters():
+        #             param.requires_grad = False
 
-#         # Helper function to get the last Conv2d out_channels from a block
-#         def get_out_channels(block):
-#             for layer in reversed(list(block.modules())):
-#                 if isinstance(layer, nn.Conv2d):
-#                     return layer.out_channels
-#             raise ValueError("No Conv2d layer found in block")
+        # Helper function to get the last Conv2d out_channels from a block
+        def get_out_channels(block):
+            for layer in reversed(list(block.modules())):
+                if isinstance(layer, nn.Conv2d):
+                    return layer.out_channels
+            raise ValueError("No Conv2d layer found in block")
 
-#         # Reduce selected intermediate outputs to 512 channels
-#         self.reduce_layers = nn.ModuleList([
-#             nn.Conv2d(get_out_channels(block), 512, kernel_size=1)
-#             for i, block in enumerate(self.features)
-#             #if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1
-#             if i in [1, 2, 3, 4, 5]
-#         ])
+        # Reduce selected intermediate outputs to 512 channels
+        self.reduce_layers = nn.ModuleList([
+            nn.Conv2d(get_out_channels(block), 512, kernel_size=1)
+            for i, block in enumerate(self.features)
+            #if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1
+            if i in [1, 2, 3, 4, 5]
+        ])
 
-#         self.features = nn.Sequential(*self.features)
+        self.features = nn.Sequential(*self.features)
 
-#     def encode_with_intermediate(self, x):
-#         results = []
-#         reduce_idx = 0
-#         for i, block in enumerate(self.features):
-#             x = block(x)
-#             #if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1:
-#             if i in [1, 2, 3, 4, 5]:
-#                 reduced = self.reduce_layers[reduce_idx](x)
-#                 reduce_idx += 1
-#                 results.append(reduced)
+    def encode_with_intermediate(self, x):
+        results = []
+        reduce_idx = 0
+        for i, block in enumerate(self.features):
+            x = block(x)
+            #if i in [1, 2, 3, 4, 5] or i == len(self.features) - 1:
+            if i in [1, 2, 3, 4, 5]:
+                reduced = self.reduce_layers[reduce_idx](x)
+                reduce_idx += 1
+                results.append(reduced)
 
-#         # Resize final feature map to match [B, 512, 8, 27] like VGG
-#         results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
+        # Resize final feature map to match [B, 512, 8, 27] like VGG
+        results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
 
-#         return results[-5:]  # use -6 for adding another block
+        return results[-5:]  # use -6 for adding another block
 
-#     def forward(self, x):
-#         return self.encode_with_intermediate(x)
+    def forward(self, x):
+        return self.encode_with_intermediate(x)
 
 # resnet18_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet18-f37072fd.pth"
-# resnet50_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet50-0676ba61.pth"
+resnet50_weights_path = "/home/woody/iwi5/iwi5333h/model/resnet50-0676ba61.pth"
 
-# # #for the generator
-# class ImageEncoderResNet50(nn.Module):
-#     def __init__(self, weight_path=None, in_channels=50):
-#         super(ImageEncoderResNet50, self).__init__()
-#         self.output_dim = 512
+# #for the generator
+class ImageEncoderResNet50(nn.Module):
+    def __init__(self, weight_path=None, in_channels=50):
+        super(ImageEncoderResNet50, self).__init__()
+        self.output_dim = 512
 
-#         # Load ResNet50 with no weights initially
-#         self.model = resnet50(weights=None)
+        # Load ResNet50 with no weights initially
+        self.model = resnet50(weights=None)
 
-#         # Load local pretrained weights if provided
-#         if weight_path:
-#             state_dict = torch.load(weight_path, map_location="cpu")
-#             self.model.load_state_dict(state_dict)
+        # Load local pretrained weights if provided
+        if weight_path:
+            state_dict = torch.load(weight_path, map_location="cpu")
+            self.model.load_state_dict(state_dict)
 
-#         # Modify the first conv layer to accept custom input channels
-#         original_conv = self.model.conv1
-#         new_conv = nn.Conv2d(
-#             in_channels=in_channels,
-#             out_channels=original_conv.out_channels,
-#             kernel_size=original_conv.kernel_size,
-#             stride=original_conv.stride,
-#             padding=original_conv.padding,
-#             bias=original_conv.bias is not None
-#         )
-#         with torch.no_grad():
-#             new_conv.weight[:, :3] = original_conv.weight
-#             if in_channels > 3:
-#                 repeat_tensor = original_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
-#                 new_conv.weight[:, 3:] = repeat_tensor
-#         self.model.conv1 = new_conv
+        # Modify the first conv layer to accept custom input channels
+        original_conv = self.model.conv1
+        new_conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=original_conv.out_channels,
+            kernel_size=original_conv.kernel_size,
+            stride=original_conv.stride,
+            padding=original_conv.padding,
+            bias=original_conv.bias is not None
+        )
+        with torch.no_grad():
+            new_conv.weight[:, :3] = original_conv.weight
+            if in_channels > 3:
+                repeat_tensor = original_conv.weight[:, :1].repeat(1, in_channels - 3, 1, 1)
+                new_conv.weight[:, 3:] = repeat_tensor
+        self.model.conv1 = new_conv
 
-#         # Select intermediate feature layers
-#         return_nodes = {
-#             'relu': 'feat1',
-#             'layer1': 'feat2',
-#             'layer2': 'feat3',
-#             'layer3': 'feat4',
-#             'layer4': 'feat5'
-#         }
-#         self.extractor = create_feature_extractor(self.model, return_nodes=return_nodes)
+        # Select intermediate feature layers
+        return_nodes = {
+            'relu': 'feat1',
+            'layer1': 'feat2',
+            'layer2': 'feat3',
+            'layer3': 'feat4',
+            'layer4': 'feat5'
+        }
+        self.extractor = create_feature_extractor(self.model, return_nodes=return_nodes)
 
 
-#         # self.reduce_layers = nn.ModuleList([
-#         #      nn.Conv2d(64, 512, kernel_size=1),   # relu
-#         #      nn.Conv2d(64, 512, kernel_size=1),   # layer1
-#         #      nn.Conv2d(128, 512, kernel_size=1),  # layer2
-#         #      nn.Conv2d(256, 512, kernel_size=1),  # layer3
-#         #      nn.Conv2d(512, 512, kernel_size=1),  # layer4
-#         #         ])
-#         # use for resnet50
-#         self.reduce_layers = nn.ModuleList([
-#             nn.Conv2d(64, 512, kernel_size=1),
-#             nn.Conv2d(256, 512, kernel_size=1),
-#             nn.Conv2d(512, 512, kernel_size=1),
-#             nn.Conv2d(1024, 512, kernel_size=1),
-#             nn.Conv2d(2048, 512, kernel_size=1),  
-#         ])
+        # self.reduce_layers = nn.ModuleList([
+        #      nn.Conv2d(64, 512, kernel_size=1),   # relu
+        #      nn.Conv2d(64, 512, kernel_size=1),   # layer1
+        #      nn.Conv2d(128, 512, kernel_size=1),  # layer2
+        #      nn.Conv2d(256, 512, kernel_size=1),  # layer3
+        #      nn.Conv2d(512, 512, kernel_size=1),  # layer4
+        #         ])
+        # use for resnet50
+        self.reduce_layers = nn.ModuleList([
+            nn.Conv2d(64, 512, kernel_size=1),
+            nn.Conv2d(256, 512, kernel_size=1),
+            nn.Conv2d(512, 512, kernel_size=1),
+            nn.Conv2d(1024, 512, kernel_size=1),
+            nn.Conv2d(2048, 512, kernel_size=1),  
+        ])
 
-#     def encode_with_intermediate(self, x):
-#         features = self.extractor(x)
-#         results = []
-#         for i, key in enumerate(['feat1', 'feat2', 'feat3', 'feat4', 'feat5']): # add feat5 for the layer4
-#             reduced = self.reduce_layers[i](features[key])
-#             results.append(reduced)
+    def encode_with_intermediate(self, x):
+        features = self.extractor(x)
+        results = []
+        for i, key in enumerate(['feat1', 'feat2', 'feat3', 'feat4', 'feat5']): # add feat5 for the layer4
+            reduced = self.reduce_layers[i](features[key])
+            results.append(reduced)
 
-#         # Resize final feature map to match VGG output shape
-#         results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
-#         return results
+        # Resize final feature map to match VGG output shape
+        results[-1] = F.interpolate(results[-1], size=(8, 27), mode='bilinear', align_corners=False)
+        return results
 
-#     def forward(self, x):
-#         return self.encode_with_intermediate(x)
+    def forward(self, x):
+        return self.encode_with_intermediate(x)
 
 
 
