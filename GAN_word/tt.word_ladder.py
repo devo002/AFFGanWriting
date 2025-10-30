@@ -11,7 +11,7 @@ import os
 
 folder = '/home/vault/iwi5/iwi5333h/word_ladder'
 img_base = '/home/woody/iwi5/iwi5333h/iam_all_extracted'
-target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
+target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/Groundtruth/gan.iam.test.gt.filter27'
 
 '''data preparation'''
 data_dict = dict()

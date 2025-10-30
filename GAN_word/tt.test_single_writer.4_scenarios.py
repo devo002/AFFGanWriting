@@ -189,24 +189,24 @@ if __name__ == '__main__':
         if i == 0:
             
             folder = folder_pre + model_epoch + '/res_4.oo_vocab_te_writer'
-            target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
-            text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/oov.common_words'
+            target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/Groundtruth/gan.iam.test.gt.filter27'
+            text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/corpora_english/oov.common_words'
             
               
         # elif i ==1:      
         #    folder = folder_pre +model_epoch +'/res_1.in_vocab_tr_writer'
-         #    target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
-        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+         #    target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/Groundtruth/gan.iam.tr_va.gt.filter27'
+        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/corpora_english/in_vocab.subset.tro.37'
             
         # elif i == 2:
         #     folder = folder_pre + model_epoch + '/res_2.in_vocab_te_writer'
-        #       target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.test.gt.filter27'
-        #       text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/in_vocab.subset.tro.37'
+        #       target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/Groundtruth/gan.iam.test.gt.filter27'
+        #       text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/corpora_english/in_vocab.subset.tro.37'
 
         # elif i == 3:
         #     folder = folder_pre + model_epoch + '/res_3.oo_vocab_tr_writer'
-        #     target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
-        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/oov.common_words'
+        #     target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/Groundtruth/gan.iam.tr_va.gt.filter27'
+        #     text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/corpora_english/oov.common_words'
 
         if not os.path.exists(folder):
             os.makedirs(folder)

@@ -251,8 +251,8 @@ if __name__ == '__main__':
 
     # ---- scenario 0 (your active one) ----
     folder = os.path.join(folder_pre, model_epoch, 'res_4.oo_vocab_te_writer')
-    target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/Groundtruth/gan.iam.tr_va.gt.filter27'
-    text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/corpora_english/writerword.57'
+    target_file = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/Groundtruth/gan.iam.tr_va.gt.filter27'
+    text_corpus = '/home/woody/iwi5/iwi5333h/AFFGanWriting/GAN_word/corpora_english/writerword.57'
 
     os.makedirs(folder, exist_ok=True)
     print(f'Output folder: {folder}')
