@@ -112,7 +112,7 @@ OOV = True
 NUM_THREAD = 2
 EARLY_STOP_EPOCH = 20
 EVAL_EPOCH = 20
-MODEL_SAVE_EPOCH = 20
+MODEL_SAVE_EPOCH = 100
 show_iter_num = 500
 
 BATCH_SIZE = 8
@@ -459,7 +459,7 @@ class EarlyStopping:
 # ---------------- Main loop ----------------
 def main(train_loader, test_loader, num_writers):
     model = ConTranModel(num_writers, show_iter_num, OOV).to(gpu)
-    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights3'
+    folder_weights = '/home/vault/iwi5/iwi5333h/save_weights22'
     os.makedirs(folder_weights, exist_ok=True)
 
     if CurriculumModelID > 0:
