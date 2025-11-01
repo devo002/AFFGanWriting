@@ -1,6 +1,6 @@
 # Line Generation
 
-The purpose of this component is to generate handwriting in the style of any given writer and integrate the process into an interactive web application. Users can choose between two generation modes: the GAN-based generator or the pretrained Emuru model.
+The purpose of this work is to generate handwriting in the style of any given writer and integrate the process into an interactive web application. Users can choose between two generation modes: the GAN-based generator or the pretrained Emuru model.
 
 For the GAN generator, users can select a writer style from a dropdown menu, which automatically loads the corresponding writer's embedding to generate handwriting in that style. Alternatively, users can upload a reference image to mimic a specific writing style.
 For the Emuru generator, the cached pretrained model is loaded and used to synthesize handwriting based on a given style.
@@ -30,10 +30,11 @@ pip install -r requirements.txt
 In the configs directory are several jsons which have the parameters used for the paper. The "data_loader": "data_dir" needs set to the location of the dataset directory. You can also adjust the GPU options here.
 
 First the handwriting recognition model and feature encoder networks need to be trained.
-
+```
 HWR: python train.py -c configs/cf_IAM_hwr_cnnOnly_batchnorm_aug.json
 Encoder: python train.py -c configs/cf_IAM_auto_2tight_newCTC.json
 Generator: python train.py -c configs/cf_IAMslant_noMask_charSpecSingleAppend_GANMedMT_autoAEMoPrcp2tightNewCTCUseGen_balB_hCF0.75_sMG.json
+```
 
 ## Resume training from checkpoints
 You can resume training from a previously saved checkpoint by
@@ -60,9 +61,11 @@ snapshot_download(repo_id="blowing-up-groundhogs/emuru")
 
 Go to the app.py and change the directory of 
 
+```
 CKPT = /path/to/generatorssavedcheckpoint.pth
 STYLE_PKL = /path/to/style_pickle
 CHARSET_JSON = /path/to/charset.json
+```
 
 Then Run
 ```
