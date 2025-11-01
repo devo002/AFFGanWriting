@@ -1,6 +1,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 ![Python 3.7](https://img.shields.io/badge/python-3.7-green.svg)
-# Handwriting Generation:Improving AFFGANwriting by Exploring Deep Learning Models for Style Encoders and Image Generation of Sentence-Level Handwriting
+# Handwriting Generation: Improving AFFGANwriting by Exploring Deep Learning Models for Style Encoders and Image Generation of Sentence-Level Handwriting
 
 The goal of this work is to enhance handwriting generation by fine-tuning recent backbone models to improve the style encoder’s capability in capturing style-specific features. Additionally, we aim to extend the system to line-level generation and deploy it as a web application, allowing users to select a writing style, input text, and instantly generate a corresponding handwriting image.
 

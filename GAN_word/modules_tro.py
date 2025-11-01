@@ -212,11 +212,11 @@ class GenModel_FC(nn.Module):
         #self.enc_image = ImageEncoderStyleCNN(in_channels=50, final_size=(8,27)).to(gpu)
         #self.enc_image = ImageEncoderInceptionV3(weight_path=inception_weights).to(gpu)
         #self.enc_image = ImageEncoderDINOv2(repo_dir=repo_dir,arch="vitl14",ckpt_path=ckpt_path,in_channels=50,final_size=(8, 27),tap_blocks=[4, 8, 16, 23]).to(gpu)
-        self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
+        #self.enc_image = ImageEncoderEfficientNet(weight_path=efficientnet_weights_path).to(gpu)
         #self.enc_image = ResNet18().to(gpu)
         #self.enc_image = ResNet18(nb_feat=384, in_channels=50).to(gpu)
         #self.enc_image = ConvNeXtTiny(weight_path=convnext_weights, in_channels=50).to(gpu)
-        #self.enc_image = ImageEncoderResNet50(weight_path=resnet50_weights_path, in_channels=50).to(gpu)
+        self.enc_image = ImageEncoderResNet50(weight_path=resnet50_weights_path, in_channels=50).to(gpu)
         self.enc_text = TextEncoder_FC(text_max_len).to(gpu)
         
         self.dec = Decoder().to(gpu)
